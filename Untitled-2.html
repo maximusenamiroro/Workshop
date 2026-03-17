@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Workshop</title>
+
+
+<style>
+
+body{
+margin:0;
+font-family:Arial;
+height:100vh;
+display:flex;
+justify-content:center;
+align-items:center;
+overflow:hidden;
+
+background:linear-gradient(45deg,#feda75,#fa7e1e,#d62976,#962fbf,#4f5bd5);
+background-size:400% 400%;
+animation:bgMove 12s infinite alternate;
+}
+
+@keyframes bgMove{
+0%{background-position:left;}
+100%{background-position:right;}
+}
+
+/* floating WS */
+
+.float{
+position:absolute;
+font-size:70px;
+font-weight:bold;
+color:rgba(255,255,255,0.15);
+animation:floatUp 20s linear infinite;
+}
+
+@keyframes floatUp{
+0%{transform:translateY(100vh);}
+100%{transform:translateY(-200px);}
+}
+
+.container{
+background:white;
+padding:40px;
+width:440px;
+border-radius:15px;
+box-shadow:0 10px 30px rgba(0,0,0,0.25);
+overflow-y:auto;
+max-height:90vh;
+z-index:1;
+}
+
+h1{
+text-align:center;
+color:#d62976;
+}
+
+input,select,textarea{
+width:100%;
+padding:10px;
+margin:6px 0;
+border-radius:8px;
+border:1px solid #ccc;
+}
+
+button{
+width:100%;
+padding:12px;
+margin-top:10px;
+border:none;
+border-radius:8px;
+color:white;
+cursor:pointer;
+background:linear-gradient(45deg,#962fbf,#d62976,#fa7e1e);
+}
+
+.switch-btn{
+background:linear-gradient(45deg,#4f5bd5,#962fbf);
+}
+
+.seller-btn{
+background:linear-gradient(45deg,#ff9a00,#ff4d00);
+}
+
+.hidden{
+display:none;
+}
+
+.terms{
+background:#f6f6f6;
+padding:10px;
+border-radius:8px;
+font-size:13px;
+height:120px;
+overflow:auto;
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="float" style="left:5%;animation-delay:2s">W</div>
+<div class="float" style="left:15%;animation-delay:4s">O</div>
+<div class="float" style="left:25%;animation-delay:6s">R</div>
+<div class="float" style="left:35%;animation-delay:8s">K</div>
+<div class="float" style="left:50%;animation-delay:10s">S</div>
+<div class="float" style="left:65%;animation-delay:12s">H</div>
+<div class="float" style="left:75%;animation-delay:14s">O</div>
+<div class="float" style="left:90%;animation-delay:16s">P</div>
+
+
+<div class="container">
+
+<h1>Workshop</h1>
+
+<!-- LOGIN PAGE -->
+
+<div id="loginPage">
+
+<p>Login to your account</p>
+
+<input type="text" placeholder="Enter your username or email">
+<input type="password" placeholder="Enter your password">
+
+<button onclick="login()">Login</button>
+
+<p>Don't have an account?</p>
+
+<button class="switch-btn" onclick="showSignup()">Create Account</button>
+
+</div>
+
+<!-- SIGNUP PAGE -->
+
+<div id="signupPage" class="hidden">
+
+<p>Create your Workshop account</p>
+
+<form>
+
+<label>Full Name</label>
+<input type="text" placeholder="Enter your full name">
+
+<label>Username</label>
+<input type="text" placeholder="Choose a username">
+
+<label>Email</label>
+<input type="email" placeholder="Enter your email">
+
+<label>Phone Number</label>
+<input type="tel" placeholder="Enter your phone number">
+
+<label>Password</label>
+<input type="password" placeholder="Create a password">
+
+<label>Confirm Password</label>
+<input type="password" placeholder="Confirm your password">
+
+<label>Gender</label>
+<select>
+<option>Select gender</option>
+<option>Male</option>
+<option>Female</option>
+<option>Other</option>
+</select>
+
+<label>Country</label>
+<select>
+<option>Afghanistan</option>
+<option>Albania</option>
+<option>Algeria</option>
+<option>Argentina</option>
+<option>Australia</option>
+<option>Austria</option>
+<option>Bangladesh</option>
+<option>Belgium</option>
+<option>Brazil</option>
+<option>Canada</option>
+<option>China</option>
+<option>Denmark</option>
+<option>Egypt</option>
+<option>Finland</option>
+<option>France</option>
+<option>Germany</option>
+<option>Ghana</option>
+<option>India</option>
+<option>Indonesia</option>
+<option>Italy</option>
+<option>Japan</option>
+<option>Kenya</option>
+<option>Malaysia</option>
+<option>Mexico</option>
+<option>Morocco</option>
+<option>Nepal</option>
+<option>Netherlands</option>
+<option>New Zealand</option>
+<option>Nigeria</option>
+<option>Norway</option>
+<option>Pakistan</option>
+<option>Philippines</option>
+<option>Poland</option>
+<option>Portugal</option>
+<option>Qatar</option>
+<option>Russia</option>
+<option>Saudi Arabia</option>
+<option>Singapore</option>
+<option>South Africa</option>
+<option>South Korea</option>
+<option>Spain</option>
+<option>Sri Lanka</option>
+<option>Sweden</option>
+<option>Switzerland</option>
+<option>Thailand</option>
+<option>Turkey</option>
+<option>Ukraine</option>
+<option>United Arab Emirates</option>
+<option>United Kingdom</option>
+<option>United States</option>
+<option>Vietnam</option>
+<option>Zambia</option>
+<option>Zimbabwe</option>
+</select>
+
+<h3>Workshop Terms & Conditions</h3>
+
+<div class="terms">
+
+By creating an account on Workshop, you agree to the following rules:
+
+1. You must only post services, skills, or work that you genuinely do or provide.
+
+2. Users are not allowed to post the same service, content, or listing repeatedly.
+
+3. Workshop is not an investment platform. Users cannot use this platform to solicit or promote investment schemes.
+
+4. Users must respect other members and avoid harmful or misleading information.
+
+5. Workshop reserves the right to remove content that violates these policies.
+
+</div>
+
+<label>
+<input type="checkbox"> I agree to the Workshop Terms and Conditions
+</label>
+
+<button onclick="signup();return false;">Create Account</button>
+
+</form>
+
+<button class="switch-btn" onclick="showLogin()">Back to Login</button>
+
+</div>
+
+</div>
+
+<script>
+
+function showSignup(){
+document.getElementById("loginPage").classList.add("hidden");
+document.getElementById("signupPage").classList.remove("hidden");
+}
+
+function showLogin(){
+document.getElementById("signupPage").classList.add("hidden");
+document.getElementById("loginPage").classList.remove("hidden");
+}
+
+function login(){
+alert("Welcome back to Workshop!");
+}
+
+function signup(){
+alert("Account successfully created on Workshop!");
+showLogin();
+}
+
+</script>
+
+</body>
+</html>
