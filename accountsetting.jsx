@@ -2,190 +2,182 @@ import React, { useState } from "react";
 import toast, { Toaster } from "react-hot-toast";
 
 export default function AccountSettings() {
-  const [form, setForm] = useState({
+  // 🔌 Placeholder for backend user data
+  const user = {
     name: "",
     username: "",
-    email: "",
-    password: "",
+    profileImage: null,
+  };
+
+  const [form, setForm] = useState({
+    isPrivate: false,
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
   });
 
-  const [errors, setErrors] = useState({});
-  const [profileImage, setProfileImage] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
-  // Handle input change
-  const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+  // 🔁 Privacy toggle (auto-save)
+  const handleToggle = () => {
+    const updated = !form.isPrivate;
+    setForm({ ...form, isPrivate: updated });
+
+    toast.success(
+      updated ? "Account is now Private 🔒" : "Account is now Public 🌍"
+    );
   };
 
-  // Image upload
-  const handleImageChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setProfileImage(URL.createObjectURL(file));
-      toast.success("Profile image updated!");
-    }
-  };
-
-  // Validation
-  const validate = () => {
-    let newErrors = {};
-
-    if (!form.name.trim()) newErrors.name = "Name is required";
-    if (!form.username.trim()) newErrors.username = "Username is required";
-
-    if (!form.email) {
-      newErrors.email = "Email is required";
-    } else if (!/\S+@\S+\.\S+/.test(form.email)) {
-      newErrors.email = "Invalid email format";
-    }
-
-    if (form.password && form.password.length < 6) {
-      newErrors.password = "Password must be at least 6 characters";
-    }
-
-    return newErrors;
-  };
-
-  // Submit
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    const validationErrors = validate();
-    setErrors(validationErrors);
-
-    if (Object.keys(validationErrors).length > 0) {
-      toast.error("Please fix the errors");
+  // 🔐 Password update
+  const handlePasswordChange = () => {
+    if (!form.currentPassword) {
+      toast.error("Enter current password");
       return;
     }
 
-    setLoading(true);
+    if (form.newPassword.length < 6) {
+      toast.error("Password must be at least 6 characters");
+      return;
+    }
 
-    // Simulate API call
-    setTimeout(() => {
-      setLoading(false);
-      toast.success("Account updated successfully!");
-    }, 1500);
+    if (form.newPassword !== form.confirmPassword) {
+      toast.error("Passwords do not match");
+      return;
+    }
+
+    toast.success("Password updated successfully 🔐");
+
+    setForm({
+      ...form,
+      currentPassword: "",
+      newPassword: "",
+      confirmPassword: "",
+    });
+  };
+
+  // ⚠️ Delete account flow
+  const handleDelete = () => {
+    if (!confirmDelete) {
+      setConfirmDelete(true);
+      return;
+    }
+
+    toast.error("Account deleted (connect backend)");
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 flex justify-center py-10 px-4">
+    <div className="max-w-2xl mx-auto py-6 px-4 space-y-6 bg-gray-100 min-h-screen">
       <Toaster position="top-right" />
 
-      <form
-        onSubmit={handleSubmit}
-        className="w-full max-w-2xl bg-white rounded-2xl shadow-lg p-6 space-y-6"
-      >
-        <h2 className="text-2xl font-semibold text-gray-800">
-          Account Settings
-        </h2>
-
-        {/* Profile */}
-        <div className="flex items-center gap-4">
-          <div className="w-20 h-20 rounded-full bg-gray-200 overflow-hidden">
-            {profileImage && (
-              <img
-                src={profileImage}
-                alt="Profile"
-                className="w-full h-full object-cover"
-              />
-            )}
-          </div>
-
-          <label className="cursor-pointer text-blue-600 text-sm font-medium">
-            Change Photo
-            <input
-              type="file"
-              onChange={handleImageChange}
-              className="hidden"
+      {/* 🔝 PROFILE (READ ONLY / BACKEND READY) */}
+      <div className="bg-green-900 text-white rounded-2xl p-5 flex items-center gap-4 shadow">
+        <div className="w-16 h-16 rounded-full bg-green-700 overflow-hidden">
+          {user.profileImage && (
+            <img
+              src={user.profileImage}
+              alt=""
+              className="w-full h-full object-cover"
             />
-          </label>
-        </div>
-
-        {/* Name */}
-        <div>
-          <label className="text-sm text-gray-600">Full Name</label>
-          <input
-            name="name"
-            value={form.name}
-            onChange={handleChange}
-            className="w-full border rounded-lg px-3 py-2 mt-1 focus:ring-2 focus:ring-blue-400 outline-none"
-          />
-          {errors.name && (
-            <p className="text-red-500 text-sm">{errors.name}</p>
           )}
         </div>
 
-        {/* Username */}
+        <div className="flex-1">
+          {/* 🔌 Backend will inject real data */}
+          <div className="h-4 w-32 bg-green-700 rounded mb-2 animate-pulse" />
+          <div className="h-3 w-24 bg-green-800 rounded animate-pulse" />
+        </div>
+      </div>
+
+      {/* 🔒 PRIVACY */}
+      <div className="bg-white rounded-2xl shadow p-5 flex justify-between items-center">
         <div>
-          <label className="text-sm text-gray-600">Username</label>
-          <input
-            name="username"
-            value={form.username}
-            onChange={handleChange}
-            className="w-full border rounded-lg px-3 py-2 mt-1 focus:ring-2 focus:ring-blue-400 outline-none"
-          />
-          {errors.username && (
-            <p className="text-red-500 text-sm">{errors.username}</p>
-          )}
+          <p className="font-medium">Private Account</p>
+          <p className="text-sm text-gray-500">
+            Only approved followers can see your content
+          </p>
         </div>
 
-        {/* Email */}
-        <div>
-          <label className="text-sm text-gray-600">Email</label>
-          <input
-            name="email"
-            value={form.email}
-            onChange={handleChange}
-            className="w-full border rounded-lg px-3 py-2 mt-1 focus:ring-2 focus:ring-blue-400 outline-none"
-          />
-          {errors.email && (
-            <p className="text-red-500 text-sm">{errors.email}</p>
-          )}
-        </div>
-
-        {/* Password */}
-        <div>
-          <label className="text-sm text-gray-600">New Password</label>
-          <input
-            type="password"
-            name="password"
-            value={form.password}
-            onChange={handleChange}
-            className="w-full border rounded-lg px-3 py-2 mt-1 focus:ring-2 focus:ring-blue-400 outline-none"
-          />
-          {errors.password && (
-            <p className="text-red-500 text-sm">{errors.password}</p>
-          )}
-        </div>
-
-        {/* Save */}
         <button
-          type="submit"
-          disabled={loading}
-          className={`w-full py-2 rounded-lg text-white transition ${
-            loading
-              ? "bg-gray-400 cursor-not-allowed"
-              : "bg-blue-600 hover:bg-blue-700"
+          onClick={handleToggle}
+          className={`w-12 h-6 flex items-center rounded-full p-1 transition ${
+            form.isPrivate ? "bg-green-800" : "bg-gray-300"
           }`}
         >
-          {loading ? "Saving..." : "Save Changes"}
+          <div
+            className={`bg-white w-4 h-4 rounded-full shadow transform transition ${
+              form.isPrivate ? "translate-x-6" : ""
+            }`}
+          />
+        </button>
+      </div>
+
+      {/* 🔐 CHANGE PASSWORD */}
+      <div className="bg-white rounded-2xl shadow p-5 space-y-4">
+        <h3 className="font-semibold text-green-900">Change Password</h3>
+
+        <input
+          type={showPassword ? "text" : "password"}
+          placeholder="Current Password"
+          value={form.currentPassword}
+          onChange={(e) =>
+            setForm({ ...form, currentPassword: e.target.value })
+          }
+          className="w-full border rounded-xl px-3 py-2 focus:ring-2 focus:ring-green-700"
+        />
+
+        <input
+          type={showPassword ? "text" : "password"}
+          placeholder="New Password"
+          value={form.newPassword}
+          onChange={(e) =>
+            setForm({ ...form, newPassword: e.target.value })
+          }
+          className="w-full border rounded-xl px-3 py-2 focus:ring-2 focus:ring-green-700"
+        />
+
+        <input
+          type={showPassword ? "text" : "password"}
+          placeholder="Confirm Password"
+          value={form.confirmPassword}
+          onChange={(e) =>
+            setForm({ ...form, confirmPassword: e.target.value })
+          }
+          className="w-full border rounded-xl px-3 py-2 focus:ring-2 focus:ring-green-700"
+        />
+
+        <button
+          onClick={() => setShowPassword(!showPassword)}
+          className="text-sm text-green-800"
+        >
+          {showPassword ? "Hide Password" : "Show Password"}
         </button>
 
-        {/* Danger Zone */}
-        <div className="border-t pt-4">
-          <h3 className="text-red-500 font-semibold mb-2">
-            Danger Zone
-          </h3>
-          <button
-            type="button"
-            onClick={() => toast.error("Account deletion not implemented")}
-            className="w-full border border-red-500 text-red-500 py-2 rounded-lg hover:bg-red-50 transition"
-          >
-            Delete Account
-          </button>
-        </div>
-      </form>
+        <button
+          onClick={handlePasswordChange}
+          className="w-full bg-green-900 text-white py-2 rounded-xl hover:bg-green-800"
+        >
+          Update Password
+        </button>
+      </div>
+
+      {/* ⚠️ DELETE ACCOUNT (IMPROVED UX) */}
+      <div className="bg-white rounded-2xl shadow p-5">
+        <h3 className="text-red-500 font-semibold mb-3">Danger Zone</h3>
+
+        <button
+          onClick={handleDelete}
+          className={`w-full py-2 rounded-xl transition ${
+            confirmDelete
+              ? "bg-red-600 text-white"
+              : "border border-red-500 text-red-500 hover:bg-red-50"
+          }`}
+        >
+          {confirmDelete
+            ? "Click again to confirm delete"
+            : "Delete Account"}
+        </button>
+      </div>
     </div>
   );
 }
