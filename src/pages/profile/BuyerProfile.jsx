@@ -1,5 +1,17 @@
 import { useState } from "react";
-import { FaBookmark, FaShoppingBag, FaBox, FaHome, FaInbox, FaUser, FaEllipsisV, FaCamera, FaUserEdit } from "react-icons/fa";
+import {
+  FaBookmark,
+  FaShoppingBag,
+  FaBox,
+  FaHome,
+  FaInbox,
+  FaUser,
+  FaEllipsisV,
+  FaUserEdit,
+  FaEnvelope,
+  FaChevronDown,
+  FaPlus
+} from "react-icons/fa";
 import { TbPlanet } from "react-icons/tb";
 import { useNavigate } from "react-router-dom";
 
@@ -8,13 +20,14 @@ export default function WorkspaceProfile() {
 
   const [profileImage, setProfileImage] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("saved");
 
   const [user, setUser] = useState({
     username: "Seller Name",
     phone: "123-456-7890",
-    country: "Country",
+    country: "Nigeria",
   });
 
   const [formData, setFormData] = useState(user);
@@ -32,7 +45,7 @@ export default function WorkspaceProfile() {
     setEditOpen(false);
   };
 
-  /* Navigation Items */
+  /* Navigation */
   const navItems = [
     { icon: <FaHome size={24} />, path: "/" },
     { icon: <FaInbox size={24} />, path: "/inbox" },
@@ -72,7 +85,12 @@ export default function WorkspaceProfile() {
             {menuOpen && (
               <div className="absolute right-0 mt-2 bg-white shadow-lg rounded-lg p-2 text-sm">
                 <p className="p-2 hover:bg-gray-100 cursor-pointer">About</p>
-                <p className="p-2 hover:bg-gray-100 cursor-pointer">Settings</p>
+                <p
+                  className="p-2 hover:bg-gray-100 cursor-pointer"
+                  onClick={() => navigate("/settings")}
+                >
+                  Settings
+                </p>
               </div>
             )}
           </div>
@@ -81,37 +99,64 @@ export default function WorkspaceProfile() {
         {/* Profile Section */}
         <div className="flex flex-col items-center mt-4">
 
+          {/* Profile Image */}
           <div className="relative">
+
             <img
               src={profileImage || "https://via.placeholder.com/150"}
               className="w-28 h-28 rounded-full object-cover border-4 border-gray-200"
               alt="profile"
             />
 
-            <div className="absolute bottom-0 right-0 flex gap-2">
+            {/* Upload Icon */}
+            <label className="absolute bottom-0 right-0 bg-green-600 p-2 rounded-full cursor-pointer text-white">
+              <FaPlus />
+              <input
+                type="file"
+                className="hidden"
+                onChange={changeProfile}
+              />
+            </label>
 
-              <label className="bg-green-600 p-2 rounded-full cursor-pointer text-white">
-                <FaCamera />
-                <input
-                  type="file"
-                  className="hidden"
-                  onChange={changeProfile}
-                />
-              </label>
-
-              <button
-                className="bg-black p-2 rounded-full text-white"
-                onClick={() => setEditOpen(true)}
-              >
-                <FaUserEdit />
-              </button>
-
-            </div>
           </div>
 
-          <h2 className="mt-3 font-bold text-lg">{user.username}</h2>
+          {/* Username Dropdown */}
+          <div
+            className="flex items-center gap-2 mt-3 cursor-pointer"
+            onClick={() => setAccountOpen(!accountOpen)}
+          >
+            <h2 className="font-bold text-lg">{user.username}</h2>
+            <FaChevronDown />
+          </div>
+
+          {accountOpen && (
+            <div className="bg-white shadow-md rounded-lg mt-2 w-40 text-center">
+              <p className="p-2 hover:bg-gray-100 cursor-pointer">@account1</p>
+              <p className="p-2 hover:bg-gray-100 cursor-pointer">@account2</p>
+              <p className="p-2 hover:bg-gray-100 cursor-pointer">Add Account</p>
+            </div>
+          )}
+
           <p className="text-gray-500 text-sm">{user.phone}</p>
           <p className="text-gray-400 text-sm">{user.country}</p>
+
+          {/* Message and Edit Buttons */}
+          <div className="flex gap-4 mt-4">
+
+            <button className="bg-green-600 text-white px-4 py-2 rounded-lg flex items-center gap-2">
+              <FaEnvelope />
+              Message
+            </button>
+
+            <button
+              className="bg-black text-white px-4 py-2 rounded-lg flex items-center gap-2"
+              onClick={() => setEditOpen(true)}
+            >
+              <FaUserEdit />
+              Edit Profile
+            </button>
+
+          </div>
 
         </div>
 
@@ -184,18 +229,15 @@ export default function WorkspaceProfile() {
 
         {/* Content */}
         <div className="p-4 text-center text-gray-600">
-
           {activeTab === "saved" && "Saved products"}
           {activeTab === "purchased" && "Purchased products"}
           {activeTab === "orders" && "Orders"}
-
         </div>
 
       </div>
 
       {/* Mobile Bottom Navigation */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t flex justify-around py-2 md:hidden shadow-md">
-
         {navItems.map((item, idx) => (
           <button
             key={idx}
@@ -205,13 +247,13 @@ export default function WorkspaceProfile() {
             {item.icon}
           </button>
         ))}
-
       </div>
 
     </div>
   );
 }
 
+/* Tab Component */
 function Tab({ icon, active, onClick }) {
   return (
     <div
