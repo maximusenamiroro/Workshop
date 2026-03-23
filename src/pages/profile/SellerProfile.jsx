@@ -1,134 +1,176 @@
 import { useState } from "react";
-import { FaBookmark, FaShoppingBag, FaBox, FaHome, FaInbox, FaTools, FaUser, FaEllipsisV, FaCamera, FaUserEdit } from "react-icons/fa";
-import { useNavigate } from "react-router-dom";
+import {
+  FaUserFriends,
+  FaStar,
+  FaPlusCircle,
+  FaHome,
+  FaInbox,
+  FaUser,
+  FaEllipsisV,
+  FaChevronDown,
+  FaUserPlus,
+  FaEnvelope
+} from "react-icons/fa";
+import { TbPlanet } from "react-icons/tb";
 
-export default function WorkshopProfile() {
-  const navigate = useNavigate();
+export default function SellerProfile() {
 
-  const [profileImage, setProfileImage] = useState(null);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("saved");
+  const [products, setProducts] = useState([]);
+  const [showAccounts, setShowAccounts] = useState(false);
 
-  const [user, setUser] = useState({
-    username: "Seller Name",
-    phone: "123-456-7890",
-    country: "Country",
-  });
-
-  const [formData, setFormData] = useState(user);
-
-  const changeProfile = (e) => {
+  const handleUpload = (e) => {
     const file = e.target.files[0];
-    if (file) setProfileImage(URL.createObjectURL(file));
+
+    if (file) {
+      const imageUrl = URL.createObjectURL(file);
+
+      const newProduct = {
+        id: Date.now(),
+        image: imageUrl
+      };
+
+      setProducts([newProduct, ...products]);
+    }
   };
-
-  const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
-
-  const saveProfile = () => {
-    setUser(formData);
-    setEditOpen(false);
-  };
-
-  const navItems = [
-    { icon: <FaHome size={24} />, path: "/" },
-    { icon: <FaInbox size={24} />, path: "/inbox" },
-    { icon: <FaTools size={24} />, path: "/workshop" },
-    { icon: <FaUser size={24} />, path: "/profile" },
-  ];
 
   return (
-    <div className="min-h-screen bg-gray-100 pb-20 flex">
-      {/* Desktop Sidebar */}
-      <div className="hidden md:flex md:flex-col md:w-20 md:h-screen md:fixed md:left-0 md:top-0 md:bg-white md:border-r md:shadow-md md:items-center md:py-4">
-        {navItems.map((item, idx) => (
-          <button key={idx} onClick={() => navigate(item.path)} className="text-gray-600 my-4 hover:text-black">
-            {item.icon}
-          </button>
-        ))}
-      </div>
+    <div className="min-h-screen flex flex-col bg-gray-100">
 
-      {/* Main Content */}
-      <div className="flex-1 md:ml-20">
-        {/* Header */}
-        <div className="flex justify-between items-center p-4">
-          <h1 className="font-bold text-lg">Workshop Profile</h1>
-          <div className="relative">
-            <FaEllipsisV onClick={() => setMenuOpen(!menuOpen)} className="cursor-pointer" />
-            {menuOpen && (
-              <div className="absolute right-0 mt-2 bg-white shadow-lg rounded-lg p-2 text-sm">
-                <p className="p-2 hover:bg-gray-100 cursor-pointer">About</p>
-                <p className="p-2 hover:bg-gray-100 cursor-pointer">Settings</p>
-              </div>
-            )}
-          </div>
+      {/* Top Bar */}
+      <div className="bg-green-900 text-white p-4 relative flex items-center justify-center">
+
+        {/* Username Dropdown */}
+        <div
+          className="flex items-center gap-2 cursor-pointer"
+          onClick={() => setShowAccounts(!showAccounts)}
+        >
+          <h2 className="font-bold text-lg">@username</h2>
+          <FaChevronDown />
         </div>
 
-        {/* Profile Section */}
-        <div className="flex flex-col items-center mt-4">
-          <div className="relative">
-            <img src={profileImage || "https://via.placeholder.com/150"} className="w-28 h-28 rounded-full object-cover border-4 border-gray-200" />
-            <div className="absolute bottom-0 right-0 flex gap-2">
-              <label className="bg-green-600 p-2 rounded-full cursor-pointer text-white">
-                <FaCamera />
-                <input type="file" className="hidden" onChange={changeProfile} />
-              </label>
-              <button className="bg-black p-2 rounded-full text-white" onClick={() => setEditOpen(true)}>
-                <FaUserEdit />
-              </button>
-            </div>
-          </div>
-          <h2 className="mt-3 font-bold text-lg">{user.username}</h2>
-          <p className="text-gray-500 text-sm">{user.phone}</p>
-          <p className="text-gray-400 text-sm">{user.country}</p>
+        {/* 3 Dot Menu */}
+        <div className="absolute right-4">
+          <FaEllipsisV />
         </div>
 
-        {/* Edit Modal */}
-        {editOpen && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white w-[90%] max-w-sm p-5 rounded-xl">
-              <h2 className="font-bold mb-3">Edit Profile</h2>
-              <input name="username" value={formData.username} onChange={handleChange} placeholder="Username" className="w-full border p-2 rounded mb-2" />
-              <input name="phone" value={formData.phone} onChange={handleChange} placeholder="Phone" className="w-full border p-2 rounded mb-2" />
-              <input name="country" value={formData.country} onChange={handleChange} placeholder="Country" className="w-full border p-2 rounded mb-3" />
-              <button onClick={saveProfile} className="w-full bg-green-600 text-white py-2 rounded">
-                Save
-              </button>
-            </div>
+        {/* Account Switch */}
+        {showAccounts && (
+          <div className="absolute top-14 bg-white text-black shadow-lg rounded-lg w-40">
+            <p className="p-2 hover:bg-gray-100 cursor-pointer">@account1</p>
+            <p className="p-2 hover:bg-gray-100 cursor-pointer">@account2</p>
+            <p className="p-2 hover:bg-gray-100 cursor-pointer">Add Account</p>
           </div>
         )}
-
-        {/* Tabs */}
-        <div className="flex justify-around mt-6 border-t pt-3">
-          <Tab icon={<FaBookmark />} active={activeTab === "saved"} onClick={() => setActiveTab("saved")} />
-          <Tab icon={<FaShoppingBag />} active={activeTab === "purchased"} onClick={() => setActiveTab("purchased")} />
-          <Tab icon={<FaBox />} active={activeTab === "orders"} onClick={() => setActiveTab("orders")} />
-        </div>
-
-        {/* Content */}
-        <div className="p-4 text-center text-gray-600">
-          {activeTab === "saved" && "Saved products"}
-          {activeTab === "purchased" && "Purchased products"}
-          {activeTab === "orders" && "Orders"}
-        </div>
       </div>
 
-      {/* Mobile Bottom Nav */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t flex justify-around py-2 md:hidden shadow-md">
-        {navItems.map((item, idx) => (
-          <button key={idx} onClick={() => navigate(item.path)} className="text-gray-600">
-            {item.icon}
+      {/* Profile Section */}
+      <div className="bg-white p-6 text-center shadow">
+
+        {/* Profile Image */}
+        <div className="flex justify-center">
+          <img
+            src="https://via.placeholder.com/100"
+            alt="profile"
+            className="w-24 h-24 rounded-full border-4 border-green-800"
+          />
+        </div>
+
+        {/* Username */}
+        <h3 className="mt-3 font-semibold text-lg">@username</h3>
+
+        {/* Message and Follow Icon */}
+        <div className="flex justify-center gap-6 mt-4">
+
+          <button className="bg-green-800 text-white px-4 py-2 rounded-lg flex items-center gap-2">
+            <FaEnvelope />
+            Message
           </button>
-        ))}
-      </div>
-    </div>
-  );
-}
 
-function Tab({ icon, active, onClick }) {
-  return (
-    <div onClick={onClick} className={`cursor-pointer text-xl ${active ? "text-black" : "text-gray-400"}`}>
-      {icon}
+          <button className="bg-gray-200 p-3 rounded-lg">
+            <FaUserPlus className="text-green-800" />
+          </button>
+
+        </div>
+
+        {/* Icons Section */}
+        <div className="flex justify-around mt-6 text-center">
+
+          {/* Followers */}
+          <div>
+            <FaUserFriends className="text-green-800 text-xl mx-auto" />
+            <p className="font-bold">1.2k</p>
+            <p className="text-xs text-gray-500">Followers</p>
+          </div>
+
+          {/* Post Product */}
+          <div>
+            <label className="cursor-pointer">
+              <FaPlusCircle className="text-green-800 text-2xl mx-auto" />
+              <p className="text-xs text-gray-500">Post</p>
+              <input
+                type="file"
+                onChange={handleUpload}
+                className="hidden"
+              />
+            </label>
+          </div>
+
+          {/* Rating */}
+          <div>
+            <FaStar className="text-yellow-500 text-xl mx-auto" />
+            <p className="font-bold">4.8</p>
+            <p className="text-xs text-gray-500">Rating</p>
+          </div>
+
+        </div>
+      </div>
+
+      {/* Product Grid */}
+      <div className="p-4 grid grid-cols-2 gap-3 flex-1">
+
+        {products.length === 0 ? (
+          <p className="text-gray-500 text-center col-span-2">
+            No products uploaded yet
+          </p>
+        ) : (
+          products.map((product) => (
+            <div key={product.id} className="bg-white rounded-xl shadow">
+              <img
+                src={product.image}
+                alt="product"
+                className="w-full h-40 object-cover rounded-xl"
+              />
+            </div>
+          ))
+        )}
+
+      </div>
+
+      {/* Bottom Navigation */}
+      <div className="bg-green-900 text-white p-3 flex justify-around text-center">
+
+        <div className="flex flex-col items-center cursor-pointer">
+          <FaHome />
+          <span className="text-xs">Home</span>
+        </div>
+
+        <div className="flex flex-col items-center cursor-pointer">
+          <FaInbox />
+          <span className="text-xs">Inbox</span>
+        </div>
+
+        <div className="flex flex-col items-center cursor-pointer">
+          <TbPlanet />
+          <span className="text-xs">Workstation</span>
+        </div>
+
+        <div className="flex flex-col items-center cursor-pointer">
+          <FaUser />
+          <span className="text-xs">Profile</span>
+        </div>
+
+      </div>
+
     </div>
   );
 }
