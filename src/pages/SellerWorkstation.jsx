@@ -1,190 +1,88 @@
-import { useState, useEffect } from "react";
+import { FaBell, FaUpload, FaEye, FaHome, FaUser, FaMapMarkerAlt } from "react-icons/fa";
 import logo from "../assets/ws-logo.png";
 
-import {
-  FaToggleOn,
-  FaToggleOff,
-  FaMapMarkerAlt,
-  FaTrash,
-  FaEye,
-  FaBox,
-  FaHome,
-  FaUser,
-  FaBell,
-  FaClock,
-} from "react-icons/fa";
-
-export default function SellerWorkstation() {
-
-  const [goLive, setGoLive] = useState(false);
-  const [service, setService] = useState("");
-  const [location, setLocation] = useState(null);
-  const [status, setStatus] = useState("Offline");
-
-  useEffect(() => {
-    if (goLive && navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition((pos) => {
-        setLocation({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-        });
-        setStatus("Online");
-      });
-    }
-  }, [goLive]);
-
-  const toggleLive = () => {
-    if (goLive) {
-      setGoLive(false);
-      setLocation(null);
-      setStatus("Offline");
-    } else {
-      setGoLive(true);
-    }
-  };
-
-  const [post, setPost] = useState({ title: "", price: "", file: null });
-  const [posts, setPosts] = useState([]);
-
-  const uploadPost = () => {
-    if (!post.title) return;
-
-    const newPost = {
-      ...post,
-      id: Date.now(),
-      preview: post.file ? URL.createObjectURL(post.file) : null,
-      views: Math.floor(Math.random() * 200),
-    };
-
-    setPosts([...posts, newPost]);
-    setPost({ title: "", price: "", file: null });
-  };
-
-  const deletePost = (id) => {
-    setPosts(posts.filter((p) => p.id !== id));
-  };
-
+export default function Workstation() {
   return (
-    <div className="min-h-screen bg-[#1A1A1A] text-white pb-32">
+    <div className="min-h-screen bg-black text-white pb-32 px-4">
 
       {/* HEADER */}
-      <div className="p-5 flex justify-between items-center">
-        <h1 className="text-xl font-semibold">Workstation</h1>
+      <div className="flex justify-between items-center py-5">
+        <h1 className="text-2xl font-semibold">Workstation</h1>
         <FaBell />
       </div>
 
-      <div className="px-4 space-y-5">
+      {/* LIVE CARD */}
+      <div className="glass p-5 mb-4 shadow-soft">
+        <h2 className="mb-3">Live Service Mode</h2>
 
-        {/* LIVE */}
-        <div className="bg-white/5 backdrop-blur-md p-5 rounded-2xl">
+        <div className="flex justify-between items-center">
+          <span>Cleaning</span>
 
-          <h2 className="mb-3 font-semibold">Live Service</h2>
-
-          <select
-            className="w-full p-2 rounded-xl bg-white/10 mb-3"
-            onChange={(e) => setService(e.target.value)}
-          >
-            <option value="">Select Service</option>
-            <option>Cleaning</option>
-            <option>Driving</option>
-            <option>Cooking</option>
-          </select>
-
-          <div className="flex justify-between items-center">
-            <div>
-              <p>Status: {status}</p>
-              <p className="text-sm text-white/60">Service: {service || "None selected"}</p>
-              {location && (
-                <p className="text-sm text-white/60">
-                  {location.lat.toFixed(3)}, {location.lng.toFixed(3)}
-                </p>
-              )}
-            </div>
-
-            <button onClick={toggleLive} className="text-4xl">
-              {goLive ? (
-                <FaToggleOn className="text-[#007AFF]" />
-              ) : (
-                <FaToggleOff className="text-white/40" />
-              )}
-            </button>
+          <div className="w-12 h-6 bg-blue-500 rounded-full flex items-center px-1">
+            <div className="w-5 h-5 bg-white rounded-full ml-auto"></div>
           </div>
-
         </div>
+
+        <p className="text-sm text-blue-400 mt-2">Status: Online</p>
+        <p className="text-xs text-white/50">4.8157, 7.0498</p>
+      </div>
+
+      {/* GRID */}
+      <div className="grid grid-cols-2 gap-4">
 
         {/* UPLOAD */}
-        <div className="bg-white/5 backdrop-blur-md p-4 rounded-2xl">
+        <div className="glass p-4 shadow-soft">
+          <FaUpload className="text-blue-500 mb-2" />
+          <p>Upload Work</p>
 
-          <FaBox className="text-[#007AFF]" />
-
-          <h3 className="mt-2">Upload Product</h3>
-
-          <input
-            placeholder="Title"
-            value={post.title}
-            onChange={(e) => setPost({ ...post, title: e.target.value })}
-            className="w-full p-2 mt-2 rounded-xl bg-white/10"
-          />
-
-          <input
-            placeholder="Price"
-            value={post.price}
-            onChange={(e) => setPost({ ...post, price: e.target.value })}
-            className="w-full p-2 mt-2 rounded-xl bg-white/10"
-          />
-
-          <input
-            type="file"
-            onChange={(e) => setPost({ ...post, file: e.target.files[0] })}
-            className="mt-2"
-          />
-
-          <button
-            onClick={uploadPost}
-            className="bg-[#007AFF] w-full py-2 mt-3 rounded-xl"
-          >
+          <button className="mt-3 w-full bg-blue-600 py-2 rounded-xl">
             Upload
           </button>
-
         </div>
 
-        {/* POSTS */}
-        <div className="bg-white/5 backdrop-blur-md p-4 rounded-2xl">
+        {/* VIEWS */}
+        <div className="glass p-4 shadow-soft">
+          <FaEye className="text-blue-500 mb-2" />
+          <p>Post Views</p>
 
-          <h3 className="mb-3">Products</h3>
-
-          {posts.map((p) => (
-            <div key={p.id} className="flex justify-between py-2 border-b border-white/10">
-              <span>{p.title}</span>
-
-              <div className="flex gap-3">
-                <span className="flex items-center gap-1">
-                  <FaEye /> {p.views}
-                </span>
-
-                <button onClick={() => deletePost(p.id)}>
-                  <FaTrash />
-                </button>
-              </div>
-            </div>
-          ))}
-
+          <h2 className="text-xl mt-2">248</h2>
+          <p className="text-xs text-white/50">Total Views</p>
         </div>
 
       </div>
 
+      {/* POSTS */}
+      <div className="mt-5">
+        <h3 className="mb-3">Your Work Posts</h3>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="glass p-2">
+            <img src="https://images.unsplash.com/photo-1581578731548-c64695cc6952"
+              className="rounded-lg h-28 w-full object-cover" />
+            <p className="text-sm mt-2">Deep Cleaning</p>
+            <p className="text-xs text-blue-400">$80</p>
+          </div>
+
+          <div className="glass p-2">
+            <img src="https://images.unsplash.com/photo-1504674900247-0877df9cc836"
+              className="rounded-lg h-28 w-full object-cover" />
+            <p className="text-sm mt-2">Cooking</p>
+            <p className="text-xs text-blue-400">$60</p>
+          </div>
+        </div>
+      </div>
+
       {/* NAVBAR */}
-      <div className="fixed bottom-5 left-0 right-0 flex justify-center">
-        <div className="bg-white/10 backdrop-blur-xl px-6 py-3 flex gap-8 rounded-full">
+      <div className="fixed bottom-6 left-0 right-0 flex justify-center">
+        <div className="glass px-6 py-3 flex gap-8 rounded-full">
 
           <FaHome />
-          <FaBox />
+          <FaMapMarkerAlt />
 
-          <div className="bg-[#007AFF] w-14 h-14 rounded-full flex items-center justify-center -mt-8 shadow-lg">
+          <div className="bg-blue-600 w-14 h-14 rounded-full flex items-center justify-center -mt-8">
             <img src={logo} className="w-7" />
           </div>
 
-          <FaMapMarkerAlt />
           <FaUser />
 
         </div>
