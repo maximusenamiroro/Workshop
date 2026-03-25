@@ -8,6 +8,9 @@ import {
   Home,
   User,
 } from "lucide-react";
+
+
+import { TbPlanet } from "react-icons/tb";
 import { useNavigate } from "react-router-dom";
 
 // ---------------- NAV ITEM ----------------
@@ -63,6 +66,18 @@ export default function ReelsPage() {
           onClick={() => setActivePage("reels")}
         />
         <NavItem
+          icon={<MessageCircle size={28} />}
+          label="Inbox"
+          active={activePage === "Inbox"}
+          onClick={() => navigate("/buyer-profile")}
+        />
+          <NavItem
+          icon={<TbPlanet size={28} />}
+          label="Workspace"
+          active={activePage === "Workspace"}
+          onClick={() => navigate("/buyer-profile")}
+        />
+          <NavItem
           icon={<User size={28} />}
           label="Profile"
           active={activePage === "profile"}
