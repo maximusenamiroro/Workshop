@@ -1,8 +1,4 @@
-<<<<<<< Updated upstream
 import { useState } from "react";
-=======
-import { useState, useRef, useEffect } from "react";
->>>>>>> Stashed changes
 import {
   FaBookmark,
   FaShoppingBag,
@@ -11,28 +7,13 @@ import {
   FaInbox,
   FaUser,
   FaEllipsisV,
-<<<<<<< Updated upstream
   FaUserEdit,
   FaEnvelope,
   FaChevronDown,
   FaPlus
 } from "react-icons/fa";
-=======
-  FaCamera,
-  FaUserEdit,
-  FaCog,
-  FaInfoCircle,
-} from "react-icons/fa";
-
-import {
-  MessageCircle,
-  Home,
-  User,
-} from "lucide-react";
-
->>>>>>> Stashed changes
 import { TbPlanet } from "react-icons/tb";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 export default function WorkspaceProfile() {
   const navigate = useNavigate();
@@ -43,8 +24,6 @@ export default function WorkspaceProfile() {
   const [editOpen, setEditOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("saved");
 
-  const menuRef = useRef();
-
   const [user, setUser] = useState({
     username: "Seller Name",
     phone: "123-456-7890",
@@ -52,19 +31,6 @@ export default function WorkspaceProfile() {
   });
 
   const [formData, setFormData] = useState(user);
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (menuRef.current && !menuRef.current.contains(e.target)) {
-        setMenuOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () =>
-      document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
   const changeProfile = (e) => {
     const file = e.target.files[0];
@@ -79,22 +45,19 @@ export default function WorkspaceProfile() {
     setEditOpen(false);
   };
 
-<<<<<<< Updated upstream
   /* Navigation */
-=======
->>>>>>> Stashed changes
   const navItems = [
-    { icon: <Home size={24} />, path: "/reels" },
-    { icon: <MessageCircle size={24} />, path: "/inbox" },
+    { icon: <FaHome size={24} />, path: "/" },
+    { icon: <FaInbox size={24} />, path: "/inbox" },
     { icon: <TbPlanet size={24} />, path: "/workspace" },
-    { icon: <User size={24} />, path: "/buyer-profile" },
+    { icon: <FaUser size={24} />, path: "/profile" },
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
+    <div className="min-h-screen bg-gray-100 pb-20 flex">
 
-      {/* Sidebar */}
-      <div className="hidden md:flex flex-col w-20 h-screen fixed left-0 top-0 bg-white border-r shadow-md items-center py-4">
+      {/* Desktop Sidebar */}
+      <div className="hidden md:flex md:flex-col md:w-20 md:h-screen md:fixed md:left-0 md:top-0 md:bg-white md:border-r md:shadow-md md:items-center md:py-4">
         {navItems.map((item, idx) => (
           <button
             key={idx}
@@ -106,24 +69,20 @@ export default function WorkspaceProfile() {
         ))}
       </div>
 
-      {/* MAIN */}
-      <div className="flex-1 md:ml-20 pb-20">
+      {/* Main Content */}
+      <div className="flex-1 md:ml-20">
 
-        {/* HEADER */}
+        {/* Header */}
         <div className="flex justify-between items-center p-4">
-          <h1 className="text-xl font-bold text-gray-800">
-            Workspace Profile
-          </h1>
+          <h1 className="font-bold text-lg">Workspace Profile</h1>
 
-          {/* MENU */}
-          <div className="relative" ref={menuRef}>
+          <div className="relative">
             <FaEllipsisV
               onClick={() => setMenuOpen(!menuOpen)}
-              className="cursor-pointer text-gray-700"
+              className="cursor-pointer"
             />
 
             {menuOpen && (
-<<<<<<< Updated upstream
               <div className="absolute right-0 mt-2 bg-white shadow-lg rounded-lg p-2 text-sm">
                 <p className="p-2 hover:bg-gray-100 cursor-pointer">About</p>
                 <p
@@ -132,42 +91,15 @@ export default function WorkspaceProfile() {
                 >
                   Settings
                 </p>
-=======
-              <div className="absolute right-0 mt-3 w-44 bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden animate-fadeIn">
-
-                <Link
-                  to="/about"
-                  className="flex items-center gap-3 px-4 py-3 hover:bg-gray-100 transition"
-                >
-                  <FaInfoCircle className="text-green-700" />
-                  About
-                </Link>
-
-                <div className="h-[1px] bg-gray-200" />
-
-                <Link
-                  to="/settings"
-                  className="flex items-center gap-3 px-4 py-3 hover:bg-gray-100 transition"
-                >
-                  <FaCog className="text-green-700" />
-                  Settings
-                </Link>
-
->>>>>>> Stashed changes
               </div>
             )}
           </div>
         </div>
 
-<<<<<<< Updated upstream
         {/* Profile Section */}
         <div className="flex flex-col items-center mt-4">
 
           {/* Profile Image */}
-=======
-        {/* PROFILE */}
-        <div className="flex flex-col items-center mt-6">
->>>>>>> Stashed changes
           <div className="relative">
 
             <img
@@ -176,7 +108,6 @@ export default function WorkspaceProfile() {
               alt="profile"
             />
 
-<<<<<<< Updated upstream
             {/* Upload Icon */}
             <label className="absolute bottom-0 right-0 bg-green-600 p-2 rounded-full cursor-pointer text-white">
               <FaPlus />
@@ -227,37 +158,15 @@ export default function WorkspaceProfile() {
 
           </div>
 
-=======
-            <div className="absolute bottom-0 right-0 flex gap-2">
-              <label className="bg-green-700 p-2 rounded-full cursor-pointer text-white">
-                <FaCamera />
-                <input type="file" className="hidden" onChange={changeProfile} />
-              </label>
-
-              <button
-                onClick={() => setEditOpen(true)}
-                className="bg-black text-white p-2 rounded-full"
-              >
-                <FaUserEdit />
-              </button>
-            </div>
-          </div>
-
-          <h2 className="mt-3 font-bold text-lg text-gray-800">
-            {user.username}
-          </h2>
-          <p className="text-gray-500 text-sm">{user.phone}</p>
-          <p className="text-gray-400 text-sm">{user.country}</p>
->>>>>>> Stashed changes
         </div>
 
-        {/* EDIT MODAL */}
+        {/* Edit Modal */}
         {editOpen && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white w-[90%] max-w-sm p-5 rounded-xl shadow-lg">
-              <h2 className="font-bold mb-3 text-gray-800">
-                Edit Profile
-              </h2>
+
+            <div className="bg-white w-[90%] max-w-sm p-5 rounded-xl">
+
+              <h2 className="font-bold mb-3">Edit Profile</h2>
 
               <input
                 name="username"
@@ -285,46 +194,61 @@ export default function WorkspaceProfile() {
 
               <button
                 onClick={saveProfile}
-                className="w-full bg-green-700 text-white py-2 rounded"
+                className="w-full bg-green-600 text-white py-2 rounded"
               >
                 Save
               </button>
+
             </div>
+
           </div>
         )}
 
-        {/* TABS */}
+        {/* Tabs */}
         <div className="flex justify-around mt-6 border-t pt-3">
-          <Tab icon={<FaBookmark />} active={activeTab === "saved"} onClick={() => setActiveTab("saved")} />
-          <Tab icon={<FaShoppingBag />} active={activeTab === "purchased"} onClick={() => setActiveTab("purchased")} />
-          <Tab icon={<FaBox />} active={activeTab === "orders"} onClick={() => setActiveTab("orders")} />
+
+          <Tab
+            icon={<FaBookmark />}
+            active={activeTab === "saved"}
+            onClick={() => setActiveTab("saved")}
+          />
+
+          <Tab
+            icon={<FaShoppingBag />}
+            active={activeTab === "purchased"}
+            onClick={() => setActiveTab("purchased")}
+          />
+
+          <Tab
+            icon={<FaBox />}
+            active={activeTab === "orders"}
+            onClick={() => setActiveTab("orders")}
+          />
+
         </div>
 
-        {/* CONTENT */}
+        {/* Content */}
         <div className="p-4 text-center text-gray-600">
           {activeTab === "saved" && "Saved products"}
           {activeTab === "purchased" && "Purchased products"}
           {activeTab === "orders" && "Orders"}
         </div>
+
       </div>
 
-<<<<<<< Updated upstream
       {/* Mobile Bottom Navigation */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t flex justify-around py-2 md:hidden shadow-md">
-=======
-      {/* MOBILE NAV */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t flex justify-around py-3 md:hidden shadow-md">
->>>>>>> Stashed changes
         {navItems.map((item, idx) => (
           <button
             key={idx}
             onClick={() => navigate(item.path)}
-            className="text-gray-600 hover:text-green-700"
+            className="text-gray-600"
           >
             {item.icon}
           </button>
         ))}
       </div>
+
     </div>
   );
 }
@@ -335,7 +259,7 @@ function Tab({ icon, active, onClick }) {
     <div
       onClick={onClick}
       className={`cursor-pointer text-xl ${
-        active ? "text-green-700" : "text-gray-400"
+        active ? "text-black" : "text-gray-400"
       }`}
     >
       {icon}
