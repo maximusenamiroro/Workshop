@@ -5,31 +5,8 @@ import {
   Share2,
   Volume2,
   VolumeX,
-  Home,
-  User,
 } from "lucide-react";
-
-
-import { TbPlanet } from "react-icons/tb";
 import { useNavigate } from "react-router-dom";
-
-// ---------------- NAV ITEM ----------------
-function NavItem({ icon, label, active, onClick }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`flex flex-col items-center justify-center transition-all
-        ${
-          active
-            ? "bg-white text-black px-5 py-2 rounded-2xl scale-105 shadow-md"
-            : "text-gray-400 px-3 py-2"
-        }`}
-    >
-      {icon}
-      <span className="text-xs mt-1">{label}</span>
-    </button>
-  );
-}
 
 // ---------------- MOCK DATA ----------------
 const mockReels = [
@@ -49,69 +26,13 @@ const mockReels = [
   },
 ];
 
-// ---------------- MAIN PAGE ----------------
+// ---------------- MAIN ----------------
 export default function ReelsPage() {
-  const [activePage, setActivePage] = useState("reels");
-  const navigate = useNavigate();
-
   return (
-    <div className="flex flex-col md:flex-row h-screen w-full bg-black text-white">
-      
-      {/* DESKTOP SIDEBAR */}
-      <div className="hidden md:flex flex-col w-24 bg-gray-900 items-center py-4 space-y-6">
-        <NavItem
-          icon={<Home size={28} />}
-          label="Home"
-          active={activePage === "reels"}
-          onClick={() => setActivePage("reels")}
-        />
-        <NavItem
-          icon={<MessageCircle size={28} />}
-          label="Inbox"
-          active={activePage === "Inbox"}
-          onClick={() => navigate("/buyer-profile")}
-        />
-          <NavItem
-          icon={<TbPlanet size={28} />}
-          label="Workspace"
-          active={activePage === "Workspace"}
-          onClick={() => navigate("/buyer-profile")}
-        />
-          <NavItem
-          icon={<User size={28} />}
-          label="Profile"
-          active={activePage === "profile"}
-          onClick={() => navigate("/buyer-profile")}
-        />
-      </div>
-
-      {/* RIGHT SIDE */}
-      <div className="flex-1 flex flex-col w-full">
-
-        {/* ✅ REELS (85% mobile height) */}
-        <div className="h-[85vh] md:h-full overflow-y-scroll snap-y snap-mandatory">
-          {mockReels.map((reel) => (
-            <ReelCard key={reel.id} reel={reel} />
-          ))}
-        </div>
-
-        {/* ✅ MOBILE NAVBAR (15%) */}
-        <div className="h-[15vh] md:hidden bg-black/90 backdrop-blur-md flex justify-around items-center">
-          <NavItem
-            icon={<Home size={28} />}
-            label="Home"
-            active={activePage === "reels"}
-            onClick={() => setActivePage("reels")}
-          />
-          <NavItem
-            icon={<User size={28} />}
-            label="Profile"
-            active={activePage === "profile"}
-            onClick={() => navigate("/buyer-profile")}
-          />
-        </div>
-
-      </div>
+    <div className="h-full overflow-y-scroll snap-y snap-mandatory">
+      {mockReels.map((reel) => (
+        <ReelCard key={reel.id} reel={reel} />
+      ))}
     </div>
   );
 }
@@ -138,8 +59,8 @@ function ReelCard({ reel }) {
   };
 
   return (
-    <div className="h-[85vh] md:h-screen snap-start w-full flex justify-center items-center relative">
-      
+    <div className="h-full snap-start w-full flex justify-center items-center relative">
+
       {/* VIDEO */}
       <video
         ref={videoRef}
@@ -157,7 +78,6 @@ function ReelCard({ reel }) {
       {/* CONTENT */}
       <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-full md:w-[40%] flex justify-between items-end px-4">
         
-        {/* LEFT */}
         <div>
           <h2
             onClick={() => navigate(`/seller/${reel.username}`)}
@@ -173,7 +93,6 @@ function ReelCard({ reel }) {
           </button>
         </div>
 
-        {/* RIGHT */}
         <div className="flex flex-col items-center gap-4">
           <button onClick={toggleLike}>
             <Heart
@@ -188,9 +107,7 @@ function ReelCard({ reel }) {
             <span className="text-xs">{comments.length}</span>
           </button>
 
-          <button>
-            <Share2 size={28} />
-          </button>
+          <Share2 size={28} />
 
           <button onClick={toggleMute}>
             {muted ? <VolumeX size={24} /> : <Volume2 size={24} />}
