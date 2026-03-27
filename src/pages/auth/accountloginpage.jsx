@@ -1,7 +1,7 @@
 import React, { useState } from "react";
-import logo from "./assets/sw.jpeg";
+import logo from "./assets/ws.png"; // use your WS logo here
 
-export default function ShoppingLogin() {
+export default function AccountLogin() {
   const [showPassword, setShowPassword] = useState(false);
 
   return (
@@ -14,8 +14,8 @@ export default function ShoppingLogin() {
         <div className="flex flex-col items-center mb-8">
           <img
             src={logo}
-            alt="SW Shopping Logo"
-            className="w-24 mb-3"
+            alt="Workshop Logo"
+            className="w-28 mb-4"
           />
 
           <h2 className="text-2xl font-bold text-green-800">
@@ -79,7 +79,6 @@ export default function ShoppingLogin() {
         </div>
 
       </div>
-
     </div>
   );
 }
