@@ -13,16 +13,16 @@ import Inbox from "../pages/InboxPage";
 export default function AppRoutes() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Landing />} />
-        <Route path="/workstation" element={<MainLayout role="seller"><Workstation /></MainLayout>} />
-        <Route path="/workspace" element={<MainLayout role="buyer"><Workspace /></MainLayout>} />
-        <Route path="/reels" element={<MainLayout><ReelsPage /></MainLayout>} />
-        <Route path="/inbox" element={<MainLayout><Inbox/></MainLayout>} />
-        <Route path="/settings" element={<Settings />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/buyer-profile" element={<BuyerProfile />} />
-        <Route path="/seller-profile" element={<SellerProfile />} />
+    <Routes>
+      <Route path="/" element={<Landing />} />
+      <Route path="/workstation" element={<MainLayout role="seller"><Workstation /></MainLayout>} />
+      <Route path="/workspace" element={<MainLayout role="buyer"><Workspace /></MainLayout>} />
+      <Route path="/reels" element={<MainLayout><ReelsPage /></MainLayout>} />
+      <Route path="/inbox" element={<MainLayout><Inbox/></MainLayout>} />
+      <Route path="/settings" element={<Settings />} />
+      <Route path="/login" element={<Login />} />
+      <Route path="/buyer-profile" element={<MainLayout role="buyer"><BuyerProfile /></MainLayout>} />
+        <Route path="/seller-profile" element={<MainLayout role="seller"><SellerProfile /></MainLayout>} />
         
       </Routes>
     </BrowserRouter>

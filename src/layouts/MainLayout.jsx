@@ -35,10 +35,8 @@ export default function MainLayout({ children, role = "buyer" }) {
 
   return (
     <div className="flex flex-col md:flex-row h-screen w-full bg-black text-white">
-
       {/* ================= DESKTOP SIDEBAR ================= */}
       <div className="hidden md:flex flex-col w-24 bg-gray-900 items-center py-4 space-y-6">
-
         <NavItem
           icon={<Home size={28} />}
           label="Home"
@@ -64,37 +62,36 @@ export default function MainLayout({ children, role = "buyer" }) {
 
         <NavItem
           icon={<User size={28} />}
-          label="Profile"
-          active={isActive("/profile")}
-          onClick={() => navigate("/profile")}
+          label={role === "seller-profile" ? " Profile" : " Profile"}
+          active={isActive(
+            role === "seller" ? "/seller-profile" : "/buyer-profile",
+          )}
+          onClick={() =>
+            navigate(role === "seller" ? "/seller-profile" : "/buyer-profile")
+          }
         />
       </div>
 
       {/* ================= MAIN CONTENT ================= */}
       <div className="flex-1 flex flex-col w-full">
-
         {/* 🔥 FIXED SCROLL ISSUE HERE */}
-        <div className="flex-1 overflow-y-auto">
-          {children}
-        </div>
+        <div className="flex-1 overflow-y-auto">{children}</div>
 
         {/* ================= MOBILE NAV ================= */}
         <div className="md:hidden bg-black/90 backdrop-blur-md flex justify-around items-center py-3 border-t border-white/10">
-
           <NavItem
             icon={<Home size={24} />}
             label="Home"
             active={isActive("/")}
             onClick={() => navigate("/")}
           />
-          
-           <NavItem
-          icon={<MessageCircle size={24} />}
-          label="Inbox"
-          active={isActive("/inbox")}
-          onClick={() => navigate("/inbox")}
-        />
 
+          <NavItem
+            icon={<MessageCircle size={24} />}
+            label="Inbox"
+            active={isActive("/inbox")}
+            onClick={() => navigate("/inbox")}
+          />
 
           <NavItem
             icon={workspaceIcon}
@@ -107,11 +104,14 @@ export default function MainLayout({ children, role = "buyer" }) {
 
           <NavItem
             icon={<User size={24} />}
-            label="Profile"
-            active={isActive("/profile")}
-            onClick={() => navigate("/profile")}
+            label={role === "seller-profile" ? " Profile" : " Profile"}
+            active={isActive(
+              role === "seller" ? "/seller-profile" : "/buyer-profile",
+            )}
+            onClick={() =>
+              navigate(role === "seller" ? "/seller-profile" : "/buyer-profile")
+            }
           />
-
         </div>
       </div>
     </div>

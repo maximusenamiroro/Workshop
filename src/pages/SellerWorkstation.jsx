@@ -1,131 +1,153 @@
 import { useState, useEffect } from "react";
-import {
-  FaBell,
-  FaUpload,
-  FaEye,
-  FaToggleOn,
-  FaToggleOff
-} from "react-icons/fa";
+import { FaEye, FaTrash, FaToggleOn, FaToggleOff } from "react-icons/fa";
 
-export default function Workstation() {
-  // ================= STATE =================
+export default function SellerWorkstation() {
+
+  // ================= LIVE MODE =================
   const [isLive, setIsLive] = useState(false);
-  const [views, setViews] = useState(248);
+  const [service, setService] = useState("");
 
-  const [posts, setPosts] = useState([
-    {
-      id: 1,
-      title: "Deep Cleaning",
-      price: "$80",
-      image: "https://images.unsplash.com/photo-1581578731548-c64695cc6952"
-    },
-    {
-      id: 2,
-      title: "Cooking",
-      price: "$60",
-      image: "https://images.unsplash.com/photo-1504674900247-0877df9cc836"
-    }
-  ]);
+  // ================= POSTS =================
+  const [posts, setPosts] = useState([]);
+  const [form, setForm] = useState({
+    title: "",
+    price: "",
+    file: null
+  });
 
-  // 🔥 Simulate real-time views (ready for backend later)
+  // ================= BOOKINGS =================
+  const [bookings, setBookings] = useState([]);
+
+  // ================= LOAD MOCK =================
+  useEffect(() => {
+    setBookings([
+      { id: 1, name: "Cleaning Job", time: "Today 4PM" }
+    ]);
+  }, []);
+
+  // ================= UPLOAD =================
+  const uploadPost = () => {
+    if (!form.title) return;
+
+    const newPost = {
+      ...form,
+      id: Date.now(),
+      preview: form.file ? URL.createObjectURL(form.file) : null,
+      views: 0,
+      createdAt: Date.now()
+    };
+
+    setPosts(prev => [newPost, ...prev]);
+
+    setForm({ title: "", price: "", file: null });
+  };
+
+  // ================= AUTO DELETE (24HRS) =================
   useEffect(() => {
     const interval = setInterval(() => {
-      setViews((prev) => prev + Math.floor(Math.random() * 5));
-    }, 3000);
+      setPosts(prev =>
+        prev.filter(p => Date.now() - p.createdAt < 86400000)
+      );
+    }, 60000);
 
     return () => clearInterval(interval);
   }, []);
 
-  // ================= UI =================
   return (
-    <div className="min-h-screen bg-[#0f0f0f] text-white px-4 md:px-8 py-4 space-y-6">
+    <div className="min-h-full bg-[#0f0f0f] text-white p-4 md:p-8 space-y-6">
 
-      {/* HEADER */}
-      <div className="flex justify-between items-center">
-        <h1 className="text-lg md:text-2xl font-semibold">
-          Workstation
-        </h1>
-        <FaBell />
-      </div>
+      <h1 className="text-xl md:text-2xl font-semibold">
+        Workstation
+      </h1>
 
-      {/* ================= LIVE SERVICE ================= */}
-      <div className="bg-white/5 backdrop-blur-md p-5 rounded-2xl border border-white/10 shadow-lg">
+      {/* ================= LIVE ================= */}
+      <div className="glass-card p-5">
+        <h2 className="mb-3">Go Live</h2>
 
-        <h2 className="mb-4 text-sm md:text-base">
-          Live Service Mode
-        </h2>
+        <select
+          onChange={(e) => setService(e.target.value)}
+          className="w-full p-2 mb-3 bg-white/10 rounded-xl"
+        >
+          <option>Select Service</option>
+          <option>Cleaning</option>
+          <option>Driving</option>
+        </select>
 
         <div className="flex justify-between items-center">
-          <div>
-            <p className="text-sm">Cleaning</p>
-            <p className="text-xs text-white/50">
-              Status: {isLive ? "Online" : "Offline"}
-            </p>
-          </div>
+          <span>Status: {isLive ? "Online" : "Offline"}</span>
 
           <button onClick={() => setIsLive(!isLive)}>
             {isLive ? (
-              <FaToggleOn size={40} className="text-[#007AFF]" />
+              <FaToggleOn className="text-[#007AFF] text-3xl" />
             ) : (
-              <FaToggleOff size={40} className="text-white/30" />
+              <FaToggleOff className="text-white/40 text-3xl" />
             )}
           </button>
         </div>
       </div>
 
-      {/* ================= GRID ================= */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {/* ================= UPLOAD ================= */}
+      <div className="glass-card p-5">
+        <h3 className="mb-3">Upload Product</h3>
 
-        {/* UPLOAD */}
-        <div className="bg-white/5 backdrop-blur-md p-5 rounded-2xl border border-white/10 shadow-lg">
+        <input
+          placeholder="Title"
+          value={form.title}
+          onChange={(e) => setForm({ ...form, title: e.target.value })}
+          className="w-full p-2 mb-2 bg-white/10 rounded-xl"
+        />
 
-          <FaUpload className="text-[#007AFF] mb-3" />
+        <input
+          placeholder="Price"
+          value={form.price}
+          onChange={(e) => setForm({ ...form, price: e.target.value })}
+          className="w-full p-2 mb-2 bg-white/10 rounded-xl"
+        />
 
-          <h3 className="mb-2">Upload Work</h3>
+        <input
+          type="file"
+          onChange={(e) => setForm({ ...form, file: e.target.files[0] })}
+        />
 
-          <button className="w-full bg-[#007AFF] py-2 rounded-xl">
-            Upload
-          </button>
-        </div>
-
-        {/* VIEWS */}
-        <div className="bg-white/5 backdrop-blur-md p-5 rounded-2xl border border-white/10 shadow-lg">
-
-          <FaEye className="text-[#007AFF] mb-3" />
-
-          <h3>Post Views</h3>
-
-          <h2 className="text-2xl mt-2">{views}</h2>
-
-          <p className="text-xs text-white/50">
-            Total Views (Live)
-          </p>
-        </div>
-
+        <button
+          onClick={uploadPost}
+          className="w-full mt-3 bg-[#007AFF] py-2 rounded-xl"
+        >
+          Upload
+        </button>
       </div>
 
       {/* ================= POSTS ================= */}
-      <div>
-        <h3 className="mb-4">Your Work Posts</h3>
+      <div className="glass-card p-5">
+        <h3 className="mb-3">Posts (24hrs)</h3>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          {posts.map((p) => (
-            <div
-              key={p.id}
-              className="bg-white/5 backdrop-blur-md p-2 rounded-xl border border-white/10"
-            >
-              <img
-                src={p.image}
-                className="rounded-lg h-28 w-full object-cover"
-              />
+        {posts.map(p => (
+          <div key={p.id} className="flex justify-between items-center py-2 border-b border-white/10">
+            <span>{p.title}</span>
 
-              <p className="text-sm mt-2">{p.title}</p>
-              <p className="text-xs text-[#007AFF]">
-                {p.price}
-              </p>
+            <div className="flex gap-3">
+              <span className="flex items-center gap-1">
+                <FaEye /> {p.views}
+              </span>
+
+              <button onClick={() => setPosts(posts.filter(x => x.id !== p.id))}>
+                <FaTrash />
+              </button>
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ================= BOOKINGS ================= */}
+      <div className="glass-card p-5">
+        <h3 className="mb-3">Bookings</h3>
+
+        {bookings.map(b => (
+          <div key={b.id} className="flex justify-between py-2 border-b border-white/10">
+            <span>{b.name}</span>
+            <span className="text-[#007AFF]">{b.time}</span>
+          </div>
+        ))}
       </div>
 
     </div>
