@@ -1,7 +1,7 @@
-import React, { useState } from "react";
-import { Home, User, MessageCircle } from "lucide-react";
+import React from "react";
+import { Home, User, MessageCircle, Briefcase } from "lucide-react";
 import { TbPlanet } from "react-icons/tb";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 
 // ---------------- NAV ITEM ----------------
 function NavItem({ icon, label, active, onClick }) {
@@ -11,8 +11,8 @@ function NavItem({ icon, label, active, onClick }) {
       className={`flex flex-col items-center justify-center transition-all
         ${
           active
-            ? "bg-white text-black px-5 py-2 rounded-2xl scale-105 shadow-md"
-            : "text-gray-400 px-3 py-2"
+            ? "bg-white text-black px-4 py-2 rounded-2xl scale-105 shadow-md"
+            : "text-gray-400 px-3 py-2 hover:text-white"
         }`}
     >
       {icon}
@@ -22,99 +22,97 @@ function NavItem({ icon, label, active, onClick }) {
 }
 
 // ---------------- MAIN LAYOUT ----------------
-export default function MainLayout({ children }) {
-  const [activePage, setActivePage] = useState("home");
+export default function MainLayout({ children, role = "buyer" }) {
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // ✅ detect active route automatically
+  const isActive = (path) => location.pathname === path;
+
+  // ✅ DIFFERENT ICON FOR SELLER
+  const workspaceIcon =
+    role === "seller" ? <Briefcase size={28} /> : <TbPlanet size={28} />;
 
   return (
     <div className="flex flex-col md:flex-row h-screen w-full bg-black text-white">
 
-      {/* ✅ DESKTOP SIDEBAR */}
+      {/* ================= DESKTOP SIDEBAR ================= */}
       <div className="hidden md:flex flex-col w-24 bg-gray-900 items-center py-4 space-y-6">
-        
+
         <NavItem
           icon={<Home size={28} />}
           label="Home"
-          active={activePage === "home"}
-          onClick={() => {
-            setActivePage("home");
-            navigate("/");
-          }}
+          active={isActive("/")}
+          onClick={() => navigate("/")}
         />
 
         <NavItem
           icon={<MessageCircle size={28} />}
           label="Inbox"
-          active={activePage === "inbox"}
-          onClick={() => {
-            setActivePage("inbox");
-            navigate("/inbox");
-          }}
+          active={isActive("/inbox")}
+          onClick={() => navigate("/inbox")}
         />
 
         <NavItem
-          icon={<TbPlanet size={28} />}
-          label="Workspace"
-          active={activePage === "workspace"}
-          onClick={() => {
-            setActivePage("workspace");
-            navigate("/workspace");
-          }}
+          icon={workspaceIcon}
+          label={role === "seller" ? "Workstation" : "Workspace"}
+          active={isActive(role === "seller" ? "/workstation" : "/workspace")}
+          onClick={() =>
+            navigate(role === "seller" ? "/workstation" : "/workspace")
+          }
         />
 
         <NavItem
           icon={<User size={28} />}
           label="Profile"
-          active={activePage === "profile"}
-          onClick={() => {
-            setActivePage("profile");
-            navigate("/buyer-profile");
-          }}
+          active={isActive("/profile")}
+          onClick={() => navigate("/profile")}
         />
       </div>
 
-      {/* ✅ PAGE CONTENT */}
+      {/* ================= MAIN CONTENT ================= */}
       <div className="flex-1 flex flex-col w-full">
-        
-        {/* 🔥 MAIN CONTENT (85% on mobile) */}
-        <div className="h-[85vh] md:h-full overflow-hidden">
+
+        {/* 🔥 FIXED SCROLL ISSUE HERE */}
+        <div className="flex-1 overflow-y-auto">
           {children}
         </div>
 
-        {/* ✅ MOBILE NAVBAR (15%) */}
-        <div className="h-[15vh] md:hidden bg-black/90 backdrop-blur-md flex justify-around items-center">
-          
+        {/* ================= MOBILE NAV ================= */}
+        <div className="md:hidden bg-black/90 backdrop-blur-md flex justify-around items-center py-3 border-t border-white/10">
+
           <NavItem
-            icon={<Home size={28} />}
+            icon={<Home size={24} />}
             label="Home"
-            active={activePage === "home"}
-            onClick={() => {
-              setActivePage("home");
-              navigate("/");
-            }}
+            active={isActive("/")}
+            onClick={() => navigate("/")}
+          />
+          
+           <NavItem
+          icon={<MessageCircle size={24} />}
+          label="Inbox"
+          active={isActive("/inbox")}
+          onClick={() => navigate("/inbox")}
+        />
+
+
+          <NavItem
+            icon={workspaceIcon}
+            label={role === "seller" ? "Work" : "Workspace"}
+            active={isActive(role === "seller" ? "/workstation" : "/workspace")}
+            onClick={() =>
+              navigate(role === "seller" ? "/workstation" : "/workspace")
+            }
           />
 
           <NavItem
-            icon={<TbPlanet size={28} />}
-            label="Workspace"
-            active={activePage === "workspace"}
-            onClick={() => {
-              setActivePage("workspace");
-              navigate("/workspace");
-            }}
-          />
-
-          <NavItem
-            icon={<User size={28} />}
+            icon={<User size={24} />}
             label="Profile"
-            active={activePage === "profile"}
-            onClick={() => {
-              setActivePage("profile");
-              navigate("/buyer-profile");
-            }}
+            active={isActive("/profile")}
+            onClick={() => navigate("/profile")}
           />
-        </div>
 
+        </div>
       </div>
     </div>
   );

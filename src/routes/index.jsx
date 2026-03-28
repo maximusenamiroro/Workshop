@@ -15,8 +15,8 @@ export default function AppRoutes() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Landing />} />
-        <Route path="/workstation" element={<MainLayout><Workstation /></MainLayout>} />
-        <Route path="/workspace" element={<MainLayout><Workspace /></MainLayout>} />
+        <Route path="/workstation" element={<MainLayout role="seller"><Workstation /></MainLayout>} />
+        <Route path="/workspace" element={<MainLayout role="buyer"><Workspace /></MainLayout>} />
         <Route path="/reels" element={<MainLayout><ReelsPage /></MainLayout>} />
         <Route path="/inbox" element={<MainLayout><Inbox/></MainLayout>} />
         <Route path="/settings" element={<Settings />} />
