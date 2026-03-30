@@ -11,10 +11,10 @@ function Activity() {
 
   const loadActivity = () => {
 
-    const storedActivity =
+    const stored =
       JSON.parse(localStorage.getItem("activity")) || []
 
-    setActivity(storedActivity)
+    setActivity(stored)
   }
 
   return (
@@ -23,7 +23,7 @@ function Activity() {
       <h2>Activity</h2>
 
       <p style={subtitle}>
-        Completed jobs and history
+        Completed services and job history
       </p>
 
       {activity.length === 0 && (
@@ -45,18 +45,17 @@ function Activity() {
           </p>
 
           <p style={status}>
-            Status: Completed
+            Completed
           </p>
 
           {job.distance && (
             <p style={distance}>
-              Distance: {job.distance}
+              Distance Covered: {job.distance}
             </p>
           )}
 
           <p style={time}>
-            Completed: {new Date(job.completedAt)
-              .toLocaleString()}
+            {new Date(job.completedAt).toLocaleString()}
           </p>
 
         </div>
@@ -98,7 +97,8 @@ const status = {
 }
 
 const distance = {
-  color: "#facc15"
+  color: "#facc15",
+  marginTop: 5
 }
 
 const time = {
