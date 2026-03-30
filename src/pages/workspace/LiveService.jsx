@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import CategoryGroup from "../components/CategoryGroup";
-import SearchBar from "../components/SearchBar";
+import CategoryGroup from "../../components/CategoryGroup";
+import SearchBar from "../../components/SearchBar";
 
 export default function LiveService() {
   const [search, setSearch] = useState("");

@@ -10,6 +10,12 @@ import Workstation from "../pages/SellerWorkstation";
 import MainLayout from "../layouts/MainLayout";
 import Inbox from "../pages/InboxPage";
 import CreateReel from "../pages/reels/CreateReel";
+import Activity from "../pages/workspace/Activity";
+import Bookings from "../pages/workstation/Bookings";
+import LiveService from "../pages/workstation/LiveService";
+import BookingDashboard from "../pages/workspace/bookingdashborad";
+import HireWorker from "../pages/workspace/Hireworker";
+
 
 export default function AppRoutes() {
   return (
@@ -71,6 +77,46 @@ export default function AppRoutes() {
           element={
             <MainLayout role="seller">
               <CreateReel />
+            </MainLayout>
+          }
+        />
+         <Route
+          path="/activity"
+          element={
+            <MainLayout role="seller">
+              <Activity />
+            </MainLayout>
+          }
+        />
+         <Route
+          path="/Bookings"
+          element={
+            <MainLayout>
+              <Bookings />
+            </MainLayout>
+          }
+        />
+         <Route
+          path="/live-service"
+          element={
+            <MainLayout role="seller">
+              <LiveService />
+            </MainLayout>
+          }
+        />
+          <Route
+          path="/booking-dashboard"
+          element={
+            <MainLayout>
+              <BookingDashboard />
+            </MainLayout>
+          }
+        />
+         <Route
+          path="/hire-worker"
+          element={
+            <MainLayout role="seller">
+              <HireWorker />
             </MainLayout>
           }
         />

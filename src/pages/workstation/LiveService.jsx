@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import WorkerCard from "../components/WorkerCard";
+import WorkerCard from "../../components/WorkerCard";
 
 export default function LiveService() {
 

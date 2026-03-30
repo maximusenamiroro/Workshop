@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import BottomNav from "../components/BottomNav"
+
 
 function Activity() {
 
@@ -62,7 +62,7 @@ function Activity() {
 
       ))}
 
-      <BottomNav />
+   
 
     </div>
   )

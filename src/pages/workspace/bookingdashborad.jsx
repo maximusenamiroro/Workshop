@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
-import BookingCard from "../components/BookingCard";
-import { getUserBookings } from "../services/bookingService";
+import BookingCard from "../../components/BookingCard";
+import { getUserBookings } from "../service/bookingservice";
 
 const BookingDashboard = () => {
   const [bookings, setBookings] = useState([]);

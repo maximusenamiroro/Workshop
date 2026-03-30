@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import BottomNav from "../components/BottomNav"
+
 
 function Bookings() {
 
@@ -126,7 +126,7 @@ function Bookings() {
         )
       })}
 
-      <BottomNav />
+  
 
     </div>
   )
