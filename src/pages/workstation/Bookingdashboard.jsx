@@ -1,71 +1,47 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
+import WorkerBookingCard from "../components/WorkerBookingCard";
+import { getWorkerBookings } from "../services/workerBookingService";
 
-export default function Bookings() {
-
+const BookingDashboard = () => {
   const [bookings, setBookings] = useState([]);
 
-  useEffect(() => {
+  const loadBookings = () => {
+    const worker = JSON.parse(localStorage.getItem("workstationUser"));
 
-    const stored =
-      JSON.parse(localStorage.getItem("workspaceBookings")) || [];
-
-    setBookings(stored);
-
-  }, []);
-
-  const acceptBooking = (id) => {
-
-    const updated = bookings.map(b =>
-      b.id === id
-        ? { ...b, status: "Accepted" }
-        : b
-    );
-
-    setBookings(updated);
-
-    localStorage.setItem(
-      "workspaceBookings",
-      JSON.stringify(updated)
-    );
+    if (worker) {
+      const data = getWorkerBookings(worker.id);
+      setBookings(data);
+    }
   };
 
-  return (
-    <div className="p-4 bg-[#0B0F19] min-h-screen text-white">
+  useEffect(() => {
+    loadBookings();
+  }, []);
 
-      <h1 className="text-xl font-semibold mb-4">
-        Bookings
+  return (
+    <div className="bg-black min-h-screen p-6">
+
+      <h1 className="text-2xl text-white font-bold mb-6">
+        Booking Requests
       </h1>
 
-      {bookings.map(booking => (
-
-        <div
-          key={booking.id}
-          className="bg-[#121826] p-4 rounded-lg mb-3"
-        >
-
-          <h3 className="font-semibold">
-            {booking.workerName}
-          </h3>
-
-          <p className="text-gray-400">
-            {booking.date} | {booking.time}
-          </p>
-
-          <p className="text-green-400">
-            {booking.status || "Pending"}
-          </p>
-
-          <button
-            onClick={() => acceptBooking(booking.id)}
-            className="bg-green-500 mt-2 px-3 py-1 rounded"
-          >
-            Accept Booking
-          </button>
-
+      {bookings.length === 0 ? (
+        <p className="text-gray-400">
+          No booking requests
+        </p>
+      ) : (
+        <div className="grid md:grid-cols-3 gap-4">
+          {bookings.map((booking) => (
+            <WorkerBookingCard
+              key={booking.id}
+              booking={booking}
+              refresh={loadBookings}
+            />
+          ))}
         </div>
-
-      ))}
-
+      )}
     </div>
   );
-}
+};
+
+export default BookingDashboard;
