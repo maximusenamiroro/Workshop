@@ -19,6 +19,8 @@ import Orders from "../pages/workspace/Orderdashboard";
 import LiveServices from "../pages/workspace/LiveService";
 import Tracking from "../pages/workspace/Tracking";
 import TrackingDashboard from "../pages/workspace/trackingdashboard";
+import Sellersetting from "../pages/settings/sellersSetting";
+
 
 export default function AppRoutes() {
   return (
@@ -152,6 +154,14 @@ export default function AppRoutes() {
           element={
             <MainLayout role="seller">
               <TrackingDashboard />
+            </MainLayout>
+          }
+        />
+        <Route
+          path="/seller-settings"
+          element={
+            <MainLayout role="seller">
+              <Sellersetting />
             </MainLayout>
           }
         />

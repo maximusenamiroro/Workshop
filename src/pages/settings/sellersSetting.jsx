@@ -10,6 +10,45 @@ import {
 } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 
+const Section = ({ title, icon, children }) => (
+  <div className="bg-white rounded-xl shadow mb-5 overflow-hidden">
+    <div className="flex items-center gap-2 px-4 py-3 border-b font-semibold text-gray-700">
+      {icon}
+      {title}
+    </div>
+    {children}
+  </div>
+);
+
+const Row = ({ label, onClick }) => (
+  <div
+    onClick={onClick}
+    className="flex justify-between items-center px-4 py-3 border-b last:border-none hover:bg-gray-50 cursor-pointer"
+  >
+    <span>{label}</span>
+    <span className="text-gray-400">›</span>
+  </div>
+);
+
+const Toggle = ({ label, value, onChange }) => (
+  <div className="flex justify-between items-center px-4 py-3 border-b last:border-none">
+    <span>{label}</span>
+
+    <button
+      onClick={onChange}
+      className={`w-11 h-6 flex items-center rounded-full p-1 transition ${
+        value ? "bg-green-500" : "bg-gray-300"
+      }`}
+    >
+      <div
+        className={`bg-white w-4 h-4 rounded-full shadow transform transition ${
+          value ? "translate-x-5" : ""
+        }`}
+      />
+    </button>
+  </div>
+);
+
 export default function SellerSettings() {
   const navigate = useNavigate();
 
@@ -26,45 +65,6 @@ export default function SellerSettings() {
       [key]: !notifications[key]
     });
   };
-
-  const Section = ({ title, icon, children }) => (
-    <div className="bg-white rounded-xl shadow mb-5 overflow-hidden">
-      <div className="flex items-center gap-2 px-4 py-3 border-b font-semibold text-gray-700">
-        {icon}
-        {title}
-      </div>
-      {children}
-    </div>
-  );
-
-  const Row = ({ label, onClick }) => (
-    <div
-      onClick={onClick}
-      className="flex justify-between items-center px-4 py-3 border-b last:border-none hover:bg-gray-50 cursor-pointer"
-    >
-      <span>{label}</span>
-      <span className="text-gray-400">›</span>
-    </div>
-  );
-
-  const Toggle = ({ label, value, onChange }) => (
-    <div className="flex justify-between items-center px-4 py-3 border-b last:border-none">
-      <span>{label}</span>
-
-      <button
-        onClick={onChange}
-        className={`w-11 h-6 flex items-center rounded-full p-1 transition ${
-          value ? "bg-green-500" : "bg-gray-300"
-        }`}
-      >
-        <div
-          className={`bg-white w-4 h-4 rounded-full shadow transform transition ${
-            value ? "translate-x-5" : ""
-          }`}
-        />
-      </button>
-    </div>
-  );
 
   return (
     <div className="min-h-screen bg-gray-100 p-4">

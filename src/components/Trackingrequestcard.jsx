@@ -1,5 +1,5 @@
 import React from "react";
-import { acceptTracking, rejectTracking } from "../services/trackingService";
+import { acceptTracking, rejectTracking } from "../pages/service/trackingService";
 
 const TrackingRequestCard = ({ tracking, refresh }) => {
 
