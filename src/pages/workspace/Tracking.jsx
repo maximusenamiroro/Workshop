@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import BottomNav from "../components/BottomNav"
 
-function wspTracking() {
+function Tracking() {
 
   const [tracking, setTracking] = useState([])
 
