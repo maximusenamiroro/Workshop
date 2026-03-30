@@ -1,70 +1,79 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 export default function CreateReel() {
+  const navigate = useNavigate();
+
   const [video, setVideo] = useState(null);
-  const [caption, setCaption] = useState("");
-  const [type, setType] = useState("product");
+  const [preview, setPreview] = useState(null);
+  const [description, setDescription] = useState("");
 
   const handleUpload = (e) => {
     const file = e.target.files[0];
-    if (file) {
-      setVideo(URL.createObjectURL(file));
-    }
+    if (!file) return;
+
+    setVideo(file);
+    setPreview(URL.createObjectURL(file));
   };
 
   const handleSubmit = () => {
-    const reelData = {
-      video,
-      caption,
-      type,
-      userId: "user-id-here", // 🔥 replace with supabase auth later
-      createdAt: new Date(),
+    if (!video) return alert("Upload a video");
+
+    const newReel = {
+      id: Date.now(),
+      video: preview, // ⚠️ temp (Supabase later)
+      description,
+      userId: "seller123",
     };
 
-    console.log("UPLOAD TO SUPABASE:", reelData);
+    const existing = JSON.parse(localStorage.getItem("reels")) || [];
+    localStorage.setItem("reels", JSON.stringify([newReel, ...existing]));
 
-    // 👉 later:
-    // supabase.from("reels").insert([reelData])
+    navigate("/profile/seller123");
   };
 
   return (
-    <div className="min-h-screen bg-black text-white p-4">
+    <div className="min-h-screen bg-black text-white p-4 flex flex-col gap-4">
 
-      <h1 className="text-xl font-bold mb-4">Create Reel</h1>
+      <h1 className="text-lg font-bold">Create Reel</h1>
 
-      {/* VIDEO PREVIEW */}
-      {video && (
-        <video src={video} className="w-full h-64 object-cover rounded-xl mb-4" controls />
-      )}
+      {/* PREVIEW */}
+      <div className="flex justify-center">
+        <div className="w-full max-w-sm aspect-[9/16] bg-black rounded-xl overflow-hidden">
 
-      {/* UPLOAD */}
+          {preview ? (
+            <video
+              src={preview}
+              className="w-full h-full object-cover"
+              autoPlay
+              loop
+              muted
+            />
+          ) : (
+            <div className="flex items-center justify-center h-full text-white/40">
+              Upload Video
+            </div>
+          )}
+
+        </div>
+      </div>
+
       <input type="file" accept="video/*" onChange={handleUpload} />
 
-      {/* CAPTION */}
-      <input
-        value={caption}
-        onChange={(e) => setCaption(e.target.value)}
-        placeholder="Write caption..."
-        className="w-full mt-3 p-2 rounded bg-gray-800"
+      <textarea
+        placeholder="Caption..."
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        className="bg-white/10 p-3 rounded-lg"
       />
 
-      {/* TYPE */}
-      <select
-        value={type}
-        onChange={(e) => setType(e.target.value)}
-        className="w-full mt-3 p-2 rounded bg-gray-800"
-      >
-        <option value="product">Product</option>
-        <option value="service">Service</option>
-      </select>
-
-      {/* BUTTON */}
       <button
         onClick={handleSubmit}
-        className="w-full mt-4 bg-blue-600 py-2 rounded-xl"
+        className="bg-blue-600 py-3 rounded-lg"
       >
-        Upload Reel
+        Post Reel
       </button>
+
     </div>
   );
 }

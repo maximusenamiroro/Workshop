@@ -1,133 +1,129 @@
 import { useState } from "react";
-import {
-  FaUserFriends,
-  FaStar,
-  FaPlusCircle,
-  FaChevronDown,
-  FaUserPlus,
-  FaEnvelope
-} from "react-icons/fa";
+import { FaChevronDown, FaEnvelope, FaUserPlus } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import UserReels from "../reels/UserReels";
-
+import SellerProducts from "./SellerProducts";
 
 export default function SellerProfile() {
   const navigate = useNavigate();
 
-  const [products, setProducts] = useState([]);
+  const [activeTab, setActiveTab] = useState("reels");
   const [showAccounts, setShowAccounts] = useState(false);
 
-  // 🔥 CHAT CONTROL
-  const hasConversation = false; // later from Supabase
-
-  const handleUpload = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const newProduct = {
-      id: Date.now(),
-      image: URL.createObjectURL(file),
-    };
-
-    setProducts([newProduct, ...products]);
+  const seller = {
+    id: "seller123",
+    username: "designer_pro",
+    avatar: "https://via.placeholder.com/100",
+    bio: "Creative designer • Logos & branding",
+    followers: 1200,
+    rating: 4.8,
   };
 
-  // 🔥 START CHAT (BUYER INITIATES)
   const startConversation = () => {
     navigate("/inbox", {
       state: {
-        sellerId: "seller123",
-        sellerName: "@username",
+        sellerId: seller.id,
+        sellerName: seller.username,
       },
     });
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-100">
+    <div className="min-h-screen bg-black text-white flex flex-col">
 
       {/* HEADER */}
-      <div className="bg-black text-white p-4 flex justify-center relative">
-
+      <div className="sticky top-0 z-50 bg-black/90 backdrop-blur-md flex justify-center py-4 border-b border-white/10">
         <div
           className="flex items-center gap-2 cursor-pointer"
           onClick={() => setShowAccounts(!showAccounts)}
         >
-          <h2 className="font-bold text-lg">@username</h2>
+          <h2 className="font-semibold">@{seller.username}</h2>
           <FaChevronDown />
         </div>
 
         {showAccounts && (
-          <div className="absolute top-14 bg-white text-black shadow-lg rounded-lg w-40">
-            <p className="p-2 hover:bg-gray-100">@account1</p>
-            <p className="p-2 hover:bg-gray-100">@account2</p>
+          <div className="absolute top-14 bg-[#1a1a1a] rounded-xl w-44">
+            <p className="p-3 hover:bg-white/10">@account1</p>
+            <p className="p-3 hover:bg-white/10">@account2</p>
           </div>
         )}
       </div>
 
       {/* PROFILE */}
-      <div className="bg-white p-6 text-center shadow">
-
+      <div className="flex flex-col items-center px-4 py-6">
         <img
-          src="https://via.placeholder.com/100"
-          className="w-24 h-24 rounded-full border-4 border-blue-600 mx-auto"
+          src={seller.avatar}
+          className="w-24 h-24 rounded-full border border-white/20"
         />
 
-        <h3 className="mt-3 font-semibold text-lg">@username</h3>
+        <h3 className="mt-3 text-lg font-semibold">
+          @{seller.username}
+        </h3>
 
-        {/* 🔥 MESSAGE BUTTON */}
-        <div className="flex justify-center gap-4 mt-4">
+        <p className="text-white/60 text-sm mt-1 text-center">
+          {seller.bio}
+        </p>
 
-          {!hasConversation ? (
-            <button
-              onClick={startConversation}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2"
-            >
-              <FaEnvelope />
-              Message
-            </button>
-          ) : (
-            <button
-              onClick={() => navigate("/inbox")}
-              className="bg-green-600 text-white px-4 py-2 rounded-lg"
-            >
-              Open Chat
-            </button>
-          )}
-
-          <button className="bg-gray-200 p-3 rounded-lg">
-            <FaUserPlus className="text-blue-600" />
+        {/* ACTIONS */}
+        <div className="flex gap-3 mt-4 w-full max-w-xs">
+          <button
+            onClick={startConversation}
+            className="flex-1 bg-white text-black py-2 rounded-lg font-semibold flex items-center justify-center gap-2"
+          >
+            <FaEnvelope />
+            Message
           </button>
 
+          <button className="bg-white/10 px-4 rounded-lg">
+            <FaUserPlus />
+          </button>
         </div>
 
         {/* STATS */}
-        <div className="flex justify-around mt-6 text-center">
-
+        <div className="flex gap-10 mt-6 text-center">
           <div>
-            <FaUserFriends className="text-blue-600 text-xl mx-auto" />
-            <p className="font-bold">1.2k</p>
-            <p className="text-xs text-gray-500">Followers</p>
+            <p className="font-bold">24</p>
+            <span className="text-xs text-white/50">Reels</span>
           </div>
 
           <div>
-            <label className="cursor-pointer">
-              <FaPlusCircle className="text-blue-600 text-2xl mx-auto" />
-              <p className="text-xs text-gray-500">Post</p>
-              <input type="file" onChange={handleUpload} className="hidden" />
-            </label>
+            <p className="font-bold">{seller.followers}</p>
+            <span className="text-xs text-white/50">Followers</span>
           </div>
 
           <div>
-            <FaStar className="text-yellow-500 text-xl mx-auto" />
-            <p className="font-bold">4.8</p>
-            <p className="text-xs text-gray-500">Rating</p>
+            <p className="font-bold">{seller.rating}</p>
+            <span className="text-xs text-white/50">Rating</span>
           </div>
-
         </div>
       </div>
 
-      {/* PRODUCTS */}
-     <UserReels userId={"seller-id"} />
+      {/* TABS */}
+      <div className="flex justify-around border-y border-white/10 py-3 text-sm">
+        <button
+          onClick={() => setActiveTab("reels")}
+          className={activeTab === "reels" ? "font-semibold" : "text-white/40"}
+        >
+          Reels
+        </button>
+
+        <button
+          onClick={() => setActiveTab("products")}
+          className={activeTab === "products" ? "font-semibold" : "text-white/40"}
+        >
+          Products
+        </button>
+      </div>
+      
+      {/* CONTENT */}
+      <div className="flex-1 overflow-y-auto">
+        {activeTab === "reels" ? (
+          <UserReels userId={seller.id} isOwner={true} />
+        ) : (
+          <SellerProducts sellerId={seller.id} />
+        )}
+      </div>
+
     </div>
   );
 }

@@ -9,22 +9,73 @@ import Workspace from "../pages/Buyerworkspace";
 import Workstation from "../pages/SellerWorkstation";
 import MainLayout from "../layouts/MainLayout";
 import Inbox from "../pages/InboxPage";
+import CreateReel from "../pages/reels/CreateReel";
 
 export default function AppRoutes() {
   return (
     <BrowserRouter>
-    <Routes>
-      <Route path="/" element={<Landing />} />
-      <Route path="/workstation" element={<MainLayout role="seller"><Workstation /></MainLayout>} />
-      <Route path="/workspace" element={<MainLayout role="buyer"><Workspace /></MainLayout>} />
-      <Route path="/reels" element={<MainLayout><ReelsPage /></MainLayout>} />
-      <Route path="/inbox" element={<MainLayout><Inbox/></MainLayout>} />
-      <Route path="/settings" element={<Settings />} />
-      <Route path="/login" element={<Login />} />
-      <Route path="/buyer-profile" element={<MainLayout role="buyer"><BuyerProfile /></MainLayout>} />
-        <Route path="/seller-profile" element={<MainLayout role="seller"><SellerProfile /></MainLayout>} />
-        
+      <Routes>
+        <Route path="/" element={<Landing />} />
+        <Route
+          path="/workstation"
+          element={
+            <MainLayout role="seller">
+              <Workstation />
+            </MainLayout>
+          }
+        />
+        <Route
+          path="/workspace"
+          element={
+            <MainLayout role="buyer">
+              <Workspace />
+            </MainLayout>
+          }
+        />
+        <Route
+          path="/reels"
+          element={
+            <MainLayout>
+              <ReelsPage />
+            </MainLayout>
+          }
+        />
+        <Route
+          path="/inbox"
+          element={
+            <MainLayout>
+              <Inbox />
+            </MainLayout>
+          }
+        />
+        <Route path="/settings" element={<Settings />} />
+        <Route path="/login" element={<Login />} />
+        <Route
+          path="/buyer-profile"
+          element={
+            <MainLayout role="buyer">
+              <BuyerProfile />
+            </MainLayout>
+          }
+        />
+        <Route
+          path="/seller-profile"
+          element={
+            <MainLayout role="seller">
+              <SellerProfile />
+            </MainLayout>
+          }
+        />
+            <Route
+          path="/create-reel"
+          element={
+            <MainLayout role="seller">
+              <CreateReel />
+            </MainLayout>
+          }
+        />
       </Routes>
+   
     </BrowserRouter>
   );
 }
