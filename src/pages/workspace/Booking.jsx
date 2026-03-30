@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import BottomNav from "../components/BottomNav"
 
-function wspBookings() {
+function Bookings() {
 
   const [bookings, setBookings] = useState([])
 
