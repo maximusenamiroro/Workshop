@@ -1,3 +1,4 @@
+
 const workersDummy = [
 
   // BOOKING WORKERS (Handskill - can be booked)
@@ -111,3 +112,13 @@ const workersDummy = [
 ];
 
 export default workersDummy;
+// import React from 'react'
+
+// export default function dummyWorkers() {
+//   return (
+//     <div>
+//       df
+//     </div>
+//   )
+// }
+

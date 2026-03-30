@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react"
-import BottomNav from "../components/BottomNav"
 
 function Tracking() {
 
@@ -101,7 +100,7 @@ function Tracking() {
 
       ))}
 
-      <BottomNav />
+    
 
     </div>
   )

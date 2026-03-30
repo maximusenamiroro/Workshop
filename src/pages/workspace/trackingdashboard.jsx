@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
-import TrackingRequestCard from "../components/TrackingRequestCard";
-import { getClientTracking } from "../services/trackingService";
+import TrackingRequestCard from "../../components/TrackingRequestCard";
+import { getClientTracking } from "./wsptracking";
 
 const TrackingDashboard = () => {
 

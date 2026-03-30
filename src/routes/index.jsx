@@ -15,7 +15,10 @@ import Bookings from "../pages/workstation/Bookings";
 import LiveService from "../pages/workstation/LiveService";
 import BookingDashboard from "../pages/workspace/bookingdashborad";
 import HireWorker from "../pages/workspace/Hireworker";
-
+import Orders from "../pages/workspace/Orderdashboard";
+import LiveServices from "../pages/workspace/LiveService";
+import Tracking from "../pages/workspace/Tracking";
+import TrackingDashboard from "../pages/workspace/trackingdashboard";
 
 export default function AppRoutes() {
   return (
@@ -117,6 +120,38 @@ export default function AppRoutes() {
           element={
             <MainLayout role="seller">
               <HireWorker />
+            </MainLayout>
+          }
+        />
+         <Route
+          path="/order-dashboard"
+          element={
+            <MainLayout role="seller">
+              <Orders />
+            </MainLayout>
+          }
+        />
+         <Route
+          path="/live-services"
+          element={
+            <MainLayout role="seller">
+              <LiveServices />
+            </MainLayout>
+          }
+        />
+        <Route
+          path="/tracking"
+          element={
+            <MainLayout role="seller">
+              <Tracking />
+            </MainLayout>
+          }
+        />
+        <Route
+          path="/tracking-dashboard"
+          element={
+            <MainLayout role="seller">
+              <TrackingDashboard />
             </MainLayout>
           }
         />
