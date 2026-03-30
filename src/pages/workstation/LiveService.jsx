@@ -1,216 +1,137 @@
-import { useEffect, useState } from "react"
+import { useState, useEffect } from "react";
+import WorkerCard from "../components/WorkerCard";
 
-function LiveService() {
+export default function LiveService() {
 
-  const [isLive, setIsLive] = useState(false)
-  const [name, setName] = useState("")
-  const [type, setType] = useState("worker")
-  const [service, setService] = useState("")
-  const [category, setCategory] = useState("")
-  const [location, setLocation] = useState("")
-  const [handSkill, setHandSkill] = useState(true)
-  const [price, setPrice] = useState("")
-  const [status, setStatus] = useState("offline")
+  const [profile, setProfile] = useState(null);
+  const [isLive, setIsLive] = useState(false);
+  const [description, setDescription] = useState("");
+  const [price, setPrice] = useState("");
 
   useEffect(() => {
+    const stored = localStorage.getItem("workstationProfile");
 
-    const liveData =
-      JSON.parse(localStorage.getItem("liveServices")) || []
-
-    if (liveData.length > 0) {
-      const last = liveData[liveData.length - 1]
-
-      setIsLive(last.isLive)
-      setName(last.name)
-      setType(last.type)
-      setService(last.service)
-      setCategory(last.category)
-      setLocation(last.location)
-      setHandSkill(last.handSkill)
-      setPrice(last.price)
-      setStatus(last.status)
+    if (stored) {
+      setProfile(JSON.parse(stored));
     }
+  }, []);
 
-  }, [])
+  const goLive = () => {
 
-  const toggleLive = () => {
+    if (!profile) return;
 
-    if (!name || !service || !location) {
-      alert("Please fill all required fields")
-      return
-    }
-
-    const newStatus = !isLive
-
-    const liveInfo = {
+    const liveData = {
       id: Date.now(),
-      name,
-      type, // worker or product
-      service,
-      category,
-      location,
-      handSkill: type === "worker" ? handSkill : null,
+      name: profile.name,
+      category: profile.category,
+      location: profile.location,
+      type: profile.type,
+      handSkill: profile.handSkill,
+      description,
       price,
-      isLive: newStatus,
-      status: newStatus ? "online" : "offline",
-      createdAt: new Date().toISOString()
-    }
-
-    setIsLive(newStatus)
-    setStatus(liveInfo.status)
+      live: true
+    };
 
     const existing =
-      JSON.parse(localStorage.getItem("liveServices")) || []
+      JSON.parse(localStorage.getItem("workspaceLiveWorkers")) || [];
 
-    if (newStatus) {
+    existing.push(liveData);
 
-      const updated = [
-        ...existing.filter(item => item.id !== liveInfo.id),
-        liveInfo
-      ]
+    localStorage.setItem(
+      "workspaceLiveWorkers",
+      JSON.stringify(existing)
+    );
 
-      localStorage.setItem(
-        "liveServices",
-        JSON.stringify(updated)
-      )
+    setIsLive(true);
 
-    } else {
+    alert("You are now live in Workspace!");
+  };
 
-      const updated =
-        existing.filter(item => item.name !== name)
-
-      localStorage.setItem(
-        "liveServices",
-        JSON.stringify(updated)
-      )
-    }
+  if (!profile) {
+    return (
+      <div className="text-white p-4">
+        No profile found. Register first.
+      </div>
+    );
   }
 
   return (
-    <div style={{ padding: 20 }}>
+    <div className="bg-[#0B0F19] min-h-screen p-4 text-white">
 
-      <h2>Live Service Mode</h2>
+      <h1 className="text-xl font-semibold mb-4">
+        Live Service
+      </h1>
 
-      <div
-        style={{
-          border: "1px solid #ddd",
-          padding: 20,
-          borderRadius: 10,
-          background: "#fff",
-          maxWidth: 420
-        }}
-      >
+      {/* Profile Info */}
+      <div className="bg-[#121826] p-4 rounded-lg mb-4">
 
-        <h3>Status: {status}</h3>
+        <p>Name: {profile.name}</p>
+        <p>Category: {profile.category}</p>
+        <p>Location: {profile.location}</p>
 
-        <br />
-
-        <label>Name</label>
-        <input
-          placeholder="John Cleaner or Gas Supplier"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-
-        <br /><br />
-
-        <label>Type</label>
-        <select
-          value={type}
-          onChange={(e) => setType(e.target.value)}
-        >
-          <option value="worker">Worker</option>
-          <option value="product">Product</option>
-        </select>
-
-        <br /><br />
-
-        <label>Service / Product</label>
-        <input
-          placeholder="House Cleaning or Gas Cylinder"
-          value={service}
-          onChange={(e) => setService(e.target.value)}
-        />
-
-        <br /><br />
-
-        <label>Category</label>
-        <input
-          placeholder="Cleaning, Mechanical, Home, Fashion"
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
-        />
-
-        <br /><br />
-
-        <label>Location</label>
-        <input
-          placeholder="Lagos"
-          value={location}
-          onChange={(e) => setLocation(e.target.value)}
-        />
-
-        <br /><br />
-
-        {type === "worker" && (
-          <>
-            <label>Service Group</label>
-
-            <select
-              value={handSkill}
-              onChange={(e) =>
-                setHandSkill(e.target.value === "true")
-              }
-            >
-              <option value="true">
-                Hand Skill (Book Worker)
-              </option>
-
-              <option value="false">
-                Non Hand Skill (Hire Worker)
-              </option>
-            </select>
-
-            <br /><br />
-          </>
-        )}
-
-        {type === "product" && (
-          <>
-            <label>Price</label>
-
-            <input
-              placeholder="25000"
-              value={price}
-              onChange={(e) =>
-                setPrice(e.target.value)
-              }
-            />
-
-            <br /><br />
-          </>
-        )}
-
-        <button
-          onClick={toggleLive}
-          style={{
-            background: isLive ? "red" : "green",
-            color: "white",
-            padding: 12,
-            border: "none",
-            borderRadius: 6,
-            width: "100%"
-          }}
-        >
-          {isLive
-            ? "Stop Live Service"
-            : "Start Live Service"}
-        </button>
+        <p className="text-green-400 mt-2">
+          {profile.type === "product"
+            ? "Product Seller"
+            : profile.handSkill
+            ? "Hand Skill Worker"
+            : "Available for Hire"}
+        </p>
 
       </div>
 
-    </div>
-  )
-}
+      {/* Description */}
+      <input
+        type="text"
+        placeholder={
+          profile.type === "product"
+            ? "Product name"
+            : "Service description"
+        }
+        className="w-full p-3 rounded bg-[#121826] mb-3"
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+      />
 
-export default LiveService
+      {/* Price */}
+      <input
+        type="number"
+        placeholder={
+          profile.type === "product"
+            ? "Product price"
+            : "Service price"
+        }
+        className="w-full p-3 rounded bg-[#121826] mb-4"
+        value={price}
+        onChange={(e) => setPrice(e.target.value)}
+      />
+
+      {/* Go Live Button */}
+      <button
+        onClick={goLive}
+        className="w-full bg-green-500 p-3 rounded-lg font-semibold"
+      >
+        Go Live
+      </button>
+
+      {/* Live Indicator */}
+      {isLive && (
+        <div className="mt-4">
+
+          <p className="text-green-400 mb-2">
+            You are Live
+          </p>
+
+          <WorkerCard
+            worker={{
+              name: profile.name,
+              role: profile.category,
+              location: profile.location,
+              live: true
+            }}
+          />
+
+        </div>
+      )}
+    </div>
+  );
+}
