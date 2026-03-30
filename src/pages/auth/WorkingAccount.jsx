@@ -14,6 +14,7 @@ import {
 import workshopLogo from "../assets/workshop-logo.png";
 
 export default function WorkingAccount() {
+
   const [showPassword, setShowPassword] = useState(false);
   const [locationLoading, setLocationLoading] = useState(false);
 
@@ -22,7 +23,8 @@ export default function WorkingAccount() {
     phone: "",
     email: "",
     country: "",
-    handwork: "",
+    accountType: "",
+    category: "",
     password: "",
     location: "",
     latitude: "",
@@ -41,6 +43,24 @@ export default function WorkingAccount() {
     "Barber",
     "Shoemaker",
     "Technician",
+  ];
+
+  const hireList = [
+    "Cleaner",
+    "Driver",
+    "Security",
+    "Assistant",
+    "Delivery Agent",
+    "Office Helper",
+  ];
+
+  const productList = [
+    "Home Supplies",
+    "Electronics",
+    "Fashion",
+    "Mechanical",
+    "Food",
+    "Office Tools",
   ];
 
   const countries = [
@@ -64,16 +84,18 @@ export default function WorkingAccount() {
   };
 
   const getLocation = () => {
+
     setLocationLoading(true);
 
     if (!navigator.geolocation) {
-      alert("Geolocation is not supported by your browser");
+      alert("Geolocation is not supported");
       setLocationLoading(false);
       return;
     }
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
+
         setForm({
           ...form,
           location: "Location detected",
@@ -91,13 +113,34 @@ export default function WorkingAccount() {
   };
 
   const handleSubmit = (e) => {
+
     e.preventDefault();
-    console.log(form);
+
+    if (!form.accountType || !form.category) {
+      alert("Please select account type and category");
+      return;
+    }
+
+    const profile = {
+      ...form,
+      type: form.accountType === "product" ? "product" : "worker",
+      handSkill: form.accountType === "handSkill",
+      createdAt: new Date().toISOString(),
+    };
+
+    localStorage.setItem(
+      "workstationProfile",
+      JSON.stringify(profile)
+    );
+
+    console.log(profile);
+
     alert("Working account created successfully!");
   };
 
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center px-4">
+
       <div className="bg-white shadow-xl rounded-2xl w-full max-w-md p-8">
 
         {/* Logo */}
@@ -182,24 +225,66 @@ export default function WorkingAccount() {
             </select>
           </div>
 
-          {/* Handwork */}
+          {/* Account Type */}
           <div className="flex items-center border rounded-lg px-3 py-2">
             <FaTools className="text-gray-400 mr-2" />
 
             <select
-              name="handwork"
+              name="accountType"
               className="w-full outline-none bg-transparent"
-              value={form.handwork}
+              value={form.accountType}
               onChange={handleChange}
               required
             >
-              <option value="">Select Handwork</option>
+              <option value="">Select Account Type</option>
 
-              {handworkList.map((work, index) => (
-                <option key={index} value={work}>
-                  {work}
-                </option>
-              ))}
+              <option value="handSkill">
+                Hand Skill Service (Book Workers)
+              </option>
+
+              <option value="hire">
+                Non Hand Skill Service (Hire Workers)
+              </option>
+
+              <option value="product">
+                Sell Products (Order Products)
+              </option>
+            </select>
+          </div>
+
+          {/* Category */}
+          <div className="flex items-center border rounded-lg px-3 py-2">
+            <FaTools className="text-gray-400 mr-2" />
+
+            <select
+              name="category"
+              className="w-full outline-none bg-transparent"
+              value={form.category}
+              onChange={handleChange}
+              required
+            >
+              <option value="">Select Category</option>
+
+              {form.accountType === "handSkill" &&
+                handworkList.map((work, index) => (
+                  <option key={index} value={work}>
+                    {work}
+                  </option>
+                ))}
+
+              {form.accountType === "hire" &&
+                hireList.map((work, index) => (
+                  <option key={index} value={work}>
+                    {work}
+                  </option>
+                ))}
+
+              {form.accountType === "product" &&
+                productList.map((work, index) => (
+                  <option key={index} value={work}>
+                    {work}
+                  </option>
+                ))}
             </select>
           </div>
 
@@ -257,6 +342,7 @@ export default function WorkingAccount() {
           >
             Create Working Account
           </button>
+
         </form>
       </div>
     </div>
