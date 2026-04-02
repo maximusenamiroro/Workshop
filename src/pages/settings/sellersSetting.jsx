@@ -6,13 +6,13 @@ import {
   FaBell,
   FaLock,
   FaQuestionCircle,
-  FaSignOutAlt
+  FaSignOutAlt,
 } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 
 const Section = ({ title, icon, children }) => (
-  <div className="bg-white rounded-xl shadow mb-5 overflow-hidden">
-    <div className="flex items-center gap-2 px-4 py-3 border-b font-semibold text-gray-700">
+  <div className="bg-white rounded-xl shadow mb-6 overflow-hidden">
+    <div className="flex items-center gap-3 px-5 py-4 border-b font-semibold text-black">
       {icon}
       {title}
     </div>
@@ -20,19 +20,22 @@ const Section = ({ title, icon, children }) => (
   </div>
 );
 
-const Row = ({ label, onClick }) => (
+const Row = ({ label, onClick, isLink = false }) => (
   <div
     onClick={onClick}
-    className="flex justify-between items-center px-4 py-3 border-b last:border-none hover:bg-gray-50 cursor-pointer"
+    className={`flex justify-between items-center px-5 py-4 border-b last:border-none 
+      hover:bg-gray-50 cursor-pointer transition-colors ${
+        isLink ? "text-black" : ""
+      }`}
   >
-    <span>{label}</span>
-    <span className="text-gray-400">›</span>
+    <span className="text-black">{label}</span>
+    {isLink && <span className="text-gray-400">›</span>}
   </div>
 );
 
 const Toggle = ({ label, value, onChange }) => (
-  <div className="flex justify-between items-center px-4 py-3 border-b last:border-none">
-    <span>{label}</span>
+  <div className="flex justify-between items-center px-5 py-4 border-b last:border-none">
+    <span className="text-black">{label}</span>
 
     <button
       onClick={onChange}
@@ -56,55 +59,57 @@ export default function SellerSettings() {
     orders: true,
     messages: true,
     promotions: false,
-    email: true
+    email: true,
   });
 
   const toggleNotification = (key) => {
-    setNotifications({
-      ...notifications,
-      [key]: !notifications[key]
-    });
+    setNotifications((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 p-4">
-
+    <div className="min-h-screen bg-gray-100 p-4 pb-20">
       {/* Header */}
       <div className="flex items-center mb-6">
-        <button onClick={() => navigate(-1)} className="mr-3 text-lg">
+        <button
+          onClick={() => navigate(-1)}
+          className="mr-3 text-2xl text-black"
+        >
           ←
         </button>
-        <h1 className="text-xl font-bold">Settings</h1>
+        <h1 className="text-2xl font-bold text-black">Settings</h1>
       </div>
 
-      {/* Account */}
-      <Section title="Account" icon={<FaUser />}>
-        <Row label="Edit Profile" />
-        <Row label="Change Password" />
-        <Row label="Phone Number" />
-        <Row label="Email Address" />
-        <Row label="Two-Factor Authentication" />
+      {/* Account Section */}
+      <Section title="Account" icon={<FaUser className="text-black" />}>
+        <Row label="Edit Profile" isLink onClick={() => navigate("/seller/edit-profile")} />
+        <Row label="Change Password" isLink onClick={() => navigate("/seller/change-password")} />
+        <Row label="Phone Number" isLink onClick={() => navigate("/seller/phone")} />
+        <Row label="Email Address" isLink onClick={() => navigate("/seller/email")} />
+        <Row label="Two-Factor Authentication" isLink onClick={() => navigate("/seller/2fa")} />
       </Section>
 
-      {/* Workshop */}
-      <Section title="Workshop / Store Settings" icon={<FaStore />}>
-        <Row label="Workshop Name" />
-        <Row label="Workshop Description" />
-        <Row label="Workshop Location" />
-        <Row label="Business Hours" />
-        <Row label="Workshop Logo" />
+      {/* Workshop / Store Section */}
+      <Section title="Workshop / Store Settings" icon={<FaStore className="text-black" />}>
+        <Row label="Workshop Name" isLink onClick={() => navigate("/seller/workshop-name")} />
+        <Row label="Workshop Description" isLink onClick={() => navigate("/seller/workshop-description")} />
+        <Row label="Workshop Location" isLink onClick={() => navigate("/seller/location")} />
+        <Row label="Business Hours" isLink onClick={() => navigate("/seller/business-hours")} />
+        <Row label="Workshop Logo" isLink onClick={() => navigate("/seller/logo")} />
       </Section>
 
-      {/* Orders */}
-      <Section title="Orders & Sales" icon={<FaShoppingCart />}>
-        <Row label="Order History" />
-        <Row label="Sales Analytics" />
-        <Row label="Shipping Settings" />
-        <Row label="Payment Methods" />
+      {/* Orders & Sales Section */}
+      <Section title="Orders & Sales" icon={<FaShoppingCart className="text-black" />}>
+        <Row label="Order History" isLink onClick={() => navigate("/seller/orders")} />
+        <Row label="Sales Analytics" isLink onClick={() => navigate("/seller/analytics")} />
+        <Row label="Shipping Settings" isLink onClick={() => navigate("/seller/shipping")} />
+        <Row label="Payment Methods" isLink onClick={() => navigate("/seller/payments")} />
       </Section>
 
-      {/* Notifications */}
-      <Section title="Notifications" icon={<FaBell />}>
+      {/* Notifications Section */}
+      <Section title="Notifications" icon={<FaBell className="text-black" />}>
         <Toggle
           label="Order Notifications"
           value={notifications.orders}
@@ -127,27 +132,33 @@ export default function SellerSettings() {
         />
       </Section>
 
-      {/* Privacy */}
-      <Section title="Privacy & Security" icon={<FaLock />}>
-        <Row label="Change Password" />
-        <Row label="Login Activity" />
-        <Row label="Blocked Users" />
-        <Row label="Data & Privacy" />
+      {/* Privacy & Security */}
+      <Section title="Privacy & Security" icon={<FaLock className="text-black" />}>
+        <Row label="Change Password" isLink onClick={() => navigate("/seller/change-password")} />
+        <Row label="Login Activity" isLink onClick={() => navigate("/seller/login-activity")} />
+        <Row label="Blocked Users" isLink onClick={() => navigate("/seller/blocked-users")} />
+        <Row label="Data & Privacy" isLink onClick={() => navigate("/seller/privacy")} />
       </Section>
 
-      {/* Help */}
-      <Section title="Help & Support" icon={<FaQuestionCircle />}>
-        <Row label="Help Center" />
-        <Row label="Report a Problem" />
-        <Row label="Contact Support" />
+      {/* Help & Support */}
+      <Section title="Help & Support" icon={<FaQuestionCircle className="text-black" />}>
+        <Row label="Help Center" isLink onClick={() => navigate("/seller/help")} />
+        <Row label="Report a Problem" isLink onClick={() => navigate("/seller/report")} />
+        <Row label="Contact Support" isLink onClick={() => navigate("/seller/contact")} />
       </Section>
 
       {/* Logout */}
-      <div className="bg-white rounded-xl shadow p-4 flex items-center text-red-500 cursor-pointer">
-        <FaSignOutAlt className="mr-2" />
+      <div
+        onClick={() => {
+          // Add your logout logic here later
+          alert("Logged out successfully");
+          navigate("/login");
+        }}
+        className="bg-white rounded-xl shadow p-5 flex items-center gap-3 text-red-600 font-medium cursor-pointer hover:bg-red-50 transition-colors mt-4"
+      >
+        <FaSignOutAlt />
         Log Out
       </div>
-
     </div>
   );
 }

@@ -1,145 +1,107 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState } from "react";
+import { supabase } from "../../lib/supabaseClient";   // ← Adjust path if needed
 
-function Tracking() {
+const Tracking = () => {
+  const [tracking, setTracking] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const [tracking, setTracking] = useState([])
+  // Fetch tracking data from Supabase
+  const loadTracking = async () => {
+    try {
+      setLoading(true);
 
+      const { data, error } = await supabase
+        .from("tracking")                    // ← Change if your table name is different
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      setTracking(data || []);
+    } catch (error) {
+      console.error("Error fetching tracking:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Real-time subscription (much better than setInterval)
   useEffect(() => {
-    loadTracking()
-    startDistanceUpdate()
-  }, [])
+    loadTracking();
 
-  const loadTracking = () => {
-
-    const stored =
-      JSON.parse(localStorage.getItem("tracking")) || []
-
-    setTracking(stored)
-  }
-
-  // live kilometer tracking
-
-  const startDistanceUpdate = () => {
-
-    setInterval(() => {
-
-      const stored =
-        JSON.parse(localStorage.getItem("tracking")) || []
-
-      const updated = stored.map(job => {
-
-        if (job.trackingStatus === "Active") {
-
-          let distance =
-            parseFloat(job.distance || "0")
-
-          distance += 0.3
-
-          return {
-            ...job,
-            distance: distance.toFixed(1) + " km"
-          }
+    // Subscribe to real-time changes
+    const subscription = supabase
+      .channel("tracking_changes")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",                     // Listen to INSERT, UPDATE, DELETE
+          schema: "public",
+          table: "tracking",              // ← Your table name
+        },
+        (payload) => {
+          console.log("Change received!", payload);
+          loadTracking();                 // Refresh data when anything changes
         }
-
-        return job
-      })
-
-      localStorage.setItem(
-        "tracking",
-        JSON.stringify(updated)
       )
+      .subscribe();
 
-      setTracking(updated)
+    // Cleanup subscription when component unmounts
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
 
-    }, 4000)
-
+  if (loading) {
+    return (
+      <div className="bg-[#0f172a] min-h-screen text-white flex items-center justify-center">
+        <p>Loading tracking data...</p>
+      </div>
+    );
   }
 
   return (
-    <div style={container}>
-
-      <h2>Tracking</h2>
-
-      <p style={subtitle}>
+    <div className="bg-[#0f172a] min-h-screen text-white p-5 pb-20">
+      <h2 className="text-2xl font-bold mb-2">Tracking</h2>
+      <p className="text-slate-400 mb-6">
         Monitor worker distance and job progress
       </p>
 
-      {tracking.length === 0 && (
-        <p>No active tracking</p>
-      )}
+      {tracking.length === 0 ? (
+        <p className="text-slate-400 text-center py-10">No active tracking</p>
+      ) : (
+        tracking.map((job) => (
+          <div
+            key={job.id}
+            className="bg-[#1e293b] p-5 rounded-2xl mb-4"
+          >
+            <h3 className="text-lg font-semibold mb-1">{job.title}</h3>
+            <p className="text-slate-300 text-sm mb-3">{job.description}</p>
 
-      {tracking.map(job => (
+            <div className="space-y-2 text-sm">
+              <p>₦{job.price?.toLocaleString()}</p>
+              <p>📍 {job.location}</p>
+              <p className="text-green-400">
+                Status: {job.trackingStatus || "Unknown"}
+              </p>
 
-        <div key={job.id} style={card}>
-
-          <h3>{job.title}</h3>
-
-          <p>{job.description}</p>
-
-          <p>₦{job.price}</p>
-
-          <p>📍 {job.location}</p>
-
-          <p style={status}>
-            Status: {job.trackingStatus}
-          </p>
-
-          {job.distance && (
-            <p style={distance}>
-              Distance Covered: {job.distance}
-            </p>
-          )}
-
-          {job.trackingStatus === "Active" && (
-            <div style={live}>
-              ● Live Kilometer Tracking
+              {job.distance && (
+                <p className="text-yellow-400 font-bold">
+                  Distance Covered: {job.distance}
+                </p>
+              )}
             </div>
-          )}
 
-        </div>
-
-      ))}
-
-    
-
+            {job.trackingStatus === "Active" && (
+              <div className="mt-4 inline-flex items-center gap-2 bg-green-500/10 text-green-400 px-4 py-1.5 rounded-full text-sm font-medium">
+                ● Live Kilometer Tracking
+              </div>
+            )}
+          </div>
+        ))
+      )}
     </div>
-  )
-}
+  );
+};
 
-const container = {
-  background: "#0f172a",
-  minHeight: "100vh",
-  color: "white",
-  padding: 20,
-  paddingBottom: 80
-}
-
-const subtitle = {
-  color: "#94a3b8",
-  marginBottom: 20
-}
-
-const card = {
-  background: "#1e293b",
-  padding: 15,
-  borderRadius: 15,
-  marginTop: 10
-}
-
-const status = {
-  color: "#22c55e"
-}
-
-const distance = {
-  color: "#facc15",
-  fontWeight: "bold",
-  marginTop: 5
-}
-
-const live = {
-  marginTop: 10,
-  color: "#22c55e",
-  fontWeight: "bold"
-}
-
-export default Tracking
+export default Tracking;

@@ -1,27 +1,47 @@
 import { useState, useEffect } from "react";
+import { supabase } from "../../lib/supabaseClient";
 import CategoryGroup from "../../components/CategoryGroup";
 import SearchBar from "../../components/SearchBar";
 
 export default function LiveService() {
   const [search, setSearch] = useState("");
   const [liveWorkers, setLiveWorkers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const fetchLiveWorkers = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const { data, error: supabaseError } = await supabase
+        .from("workers")                    // ← Change if your table name is different
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (supabaseError) throw supabaseError;
+
+      setLiveWorkers(data || []);
+    } catch (err) {
+      console.error("Error fetching live workers:", err);
+      setError("Failed to load live services");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const stored =
-      JSON.parse(localStorage.getItem("workspaceLiveWorkers")) || [];
-
-    setLiveWorkers(stored);
+    fetchLiveWorkers();
   }, []);
 
   // Search filter
-  const filtered = liveWorkers.filter(
-    (item) =>
-      item.name.toLowerCase().includes(search.toLowerCase()) ||
-      item.category.toLowerCase().includes(search.toLowerCase()) ||
-      item.location.toLowerCase().includes(search.toLowerCase())
+  const filtered = liveWorkers.filter((item) =>
+    item.name?.toLowerCase().includes(search.toLowerCase()) ||
+    item.category?.toLowerCase().includes(search.toLowerCase()) ||
+    item.location?.toLowerCase().includes(search.toLowerCase())
   );
 
-  // Grouping
+  // Grouping logic
   const bookWorkers = filtered.filter(
     (w) => w.type === "worker" && w.handSkill && w.live
   );
@@ -36,9 +56,24 @@ export default function LiveService() {
 
   const nearbyWorkers = filtered.filter((w) => !w.live);
 
+  if (loading) {
+    return (
+      <div className="bg-[#0B0F19] min-h-screen p-4 flex items-center justify-center">
+        <p className="text-gray-400">Loading live services...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-[#0B0F19] min-h-screen p-4 flex items-center justify-center">
+        <p className="text-red-400">{error}</p>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-[#0B0F19] min-h-screen p-4">
-
       {/* Title */}
       <h1 className="text-white text-xl font-semibold mb-4">
         Live Services

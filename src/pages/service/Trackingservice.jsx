@@ -1,4 +1,4 @@
-import { supabase } from "../lib/supabaseClient";
+import { supabase } from "../../lib/supabaseClient";
 
 /**
  * ===============================
@@ -164,4 +164,28 @@ export const subscribeToTracking = (trackingId, callback) => {
       }
     )
     .subscribe();
+};
+
+/**
+ * ===============================
+ * REJECT TRACKING
+ * ===============================
+ */
+export const rejectTracking = async (trackingId) => {
+  try {
+    const { data, error } = await supabase
+      .from("tracking_requests")
+      .update({
+        status: "rejected",
+        rejected_at: new Date()
+      })
+      .eq("id", trackingId)
+      .select();
+
+    if (error) throw error;
+    return data[0];
+  } catch (error) {
+    console.error("Reject tracking error:", error.message);
+    return null;
+  }
 };
