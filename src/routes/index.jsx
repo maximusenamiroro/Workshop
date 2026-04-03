@@ -7,7 +7,8 @@ import MainLayout from "../layouts/MainLayout";
 // Pages
 import Landing from "../pages/Landing";
 import Login from "../pages/auth/Login";
-import Signup from "../pages/auth/Register";
+import Signup from "../pages/auth/Register";        // You named it Register
+import ResetPassword from "../pages/auth/resetpassword";
 import ReelsPage from "../pages/reels/ReelsPage";
 import Workspace from "../pages/Buyerworkspace";
 import Workstation from "../pages/SellerWorkstation";
@@ -29,7 +30,7 @@ import Settings from "../pages/settings/Settings";
 import SellerProfile from "../pages/profile/SellerProfile";
 import BuyerProfile from "../pages/profile/BuyerProfile";
 
-// Protected Route
+// Protected Route Component
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { user, role, loading } = useAuth();
 
@@ -60,8 +61,9 @@ export default function AppRoutes() {
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
 
-        {/* Reels - Main landing page after login */}
+        {/* Reels - Main landing page after login (as you requested) */}
         <Route
           path="/reels"
           element={
@@ -71,7 +73,7 @@ export default function AppRoutes() {
           }
         />
 
-        {/* Client (Workspace) Routes */}
+        {/* Client Routes */}
         <Route
           path="/workspace"
           element={
@@ -83,7 +85,7 @@ export default function AppRoutes() {
           }
         />
 
-        {/* Worker (Workstation) Routes */}
+        {/* Worker Routes */}
         <Route
           path="/workstation"
           element={
@@ -263,7 +265,7 @@ export default function AppRoutes() {
           }
         />
 
-        {/* Fallback */}
+        {/* Fallback Route */}
         <Route path="*" element={<Navigate to="/reels" replace />} />
       </Routes>
     </BrowserRouter>

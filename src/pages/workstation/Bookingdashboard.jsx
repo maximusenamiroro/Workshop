@@ -12,11 +12,10 @@ const BookingDashboard = () => {
       setLoading(true);
       setError(null);
 
-      // Get current logged-in worker
       const { data: { user } } = await supabase.auth.getUser();
 
       if (!user) {
-        setError("Please log in to view bookings");
+        setError("Please log in to view your bookings");
         setBookings([]);
         return;
       }
@@ -29,7 +28,7 @@ const BookingDashboard = () => {
             full_name
           )
         `)
-        .eq("worker_id", user.id)                    // Only show jobs for this worker
+        .eq("worker_id", user.id)
         .order("created_at", { ascending: false });
 
       if (supabaseError) throw supabaseError;
@@ -37,10 +36,15 @@ const BookingDashboard = () => {
       setBookings(data || []);
     } catch (err) {
       console.error("Error fetching worker bookings:", err);
-      setError("Failed to load booking requests");
+      setError("Failed to load booking requests. Please try again.");
     } finally {
       setLoading(false);
     }
+  };
+
+  // Refresh function for WorkerBookingCard
+  const refreshBookings = () => {
+    loadBookings();
   };
 
   useEffect(() => {
@@ -66,14 +70,14 @@ const BookingDashboard = () => {
       )}
 
       {bookings.length === 0 ? (
-        <p className="text-gray-400">No booking requests yet</p>
+        <p className="text-gray-400">No booking requests at the moment</p>
       ) : (
-        <div className="grid md:grid-cols-3 gap-4">
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
           {bookings.map((booking) => (
             <WorkerBookingCard
               key={booking.id}
               booking={booking}
-              refresh={loadBookings}
+              refresh={refreshBookings}
             />
           ))}
         </div>

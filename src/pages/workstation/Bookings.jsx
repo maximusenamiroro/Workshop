@@ -22,18 +22,15 @@ function Bookings() {
         .from("hire_requests")
         .select("*")
         .eq("worker_id", user.id)
-        .eq("status", "pending")                    // Only pending bookings
+        .eq("status", "pending")
         .order("created_at", { ascending: false });
 
       if (supabaseError) throw supabaseError;
 
-      // Group by category
       const grouped = {};
       (data || []).forEach((booking) => {
         const category = booking.category || "For Hire";
-        if (!grouped[category]) {
-          grouped[category] = [];
-        }
+        if (!grouped[category]) grouped[category] = [];
         grouped[category].push(booking);
       });
 
@@ -46,7 +43,6 @@ function Bookings() {
     }
   };
 
-  // Accept Booking
   const acceptBooking = async (booking) => {
     try {
       const { error } = await supabase
@@ -59,16 +55,13 @@ function Bookings() {
 
       if (error) throw error;
 
-      // Optionally move to tracking table or update tracking status
       alert("Booking Accepted!");
-      loadBookings();                    // Refresh the list
+      loadBookings();
     } catch (err) {
-      console.error(err);
       alert("Failed to accept booking");
     }
   };
 
-  // Decline Booking
   const declineBooking = async (booking) => {
     try {
       const { error } = await supabase
@@ -84,7 +77,6 @@ function Bookings() {
       alert("Booking Declined");
       loadBookings();
     } catch (err) {
-      console.error(err);
       alert("Failed to decline booking");
     }
   };
@@ -93,32 +85,15 @@ function Bookings() {
     loadBookings();
   }, []);
 
-  if (loading) {
-    return (
-      <div style={container}>
-        <p>Loading bookings...</p>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div style={container}>
-        <p style={{ color: "#ef4444" }}>{error}</p>
-      </div>
-    );
-  }
+  if (loading) return <div style={container}><p>Loading bookings...</p></div>;
+  if (error) return <div style={container}><p style={{ color: "#ef4444" }}>{error}</p></div>;
 
   return (
     <div style={container}>
       <h2>Client Bookings</h2>
-      <p style={subtitle}>
-        Organized by category
-      </p>
+      <p style={subtitle}>Organized by category</p>
 
-      {Object.keys(groupedBookings).length === 0 && (
-        <p>No bookings yet</p>
-      )}
+      {Object.keys(groupedBookings).length === 0 && <p>No bookings yet</p>}
 
       {Object.keys(groupedBookings).map((category) => (
         <div key={category}>
@@ -133,16 +108,10 @@ function Bookings() {
               <p style={status}>Status: Pending</p>
 
               <div style={actions}>
-                <button
-                  style={acceptBtn}
-                  onClick={() => acceptBooking(booking)}
-                >
+                <button style={acceptBtn} onClick={() => acceptBooking(booking)}>
                   Accept
                 </button>
-                <button
-                  style={declineBtn}
-                  onClick={() => declineBooking(booking)}
-                >
+                <button style={declineBtn} onClick={() => declineBooking(booking)}>
                   Decline
                 </button>
               </div>
@@ -155,55 +124,14 @@ function Bookings() {
 }
 
 // Your existing styles
-const container = {
-  background: "#0f172a",
-  minHeight: "100vh",
-  color: "white",
-  padding: 20,
-  paddingBottom: 80
-};
-
-const subtitle = {
-  color: "#94a3b8",
-  marginBottom: 20
-};
-
-const categoryTitle = {
-  marginTop: 20,
-  fontSize: 18,
-  fontWeight: "bold",
-  color: "#22c55e"
-};
-
-const card = {
-  background: "#1e293b",
-  padding: 15,
-  borderRadius: 15,
-  marginTop: 10
-};
-
+const container = { background: "#0f172a", minHeight: "100vh", color: "white", padding: 20, paddingBottom: 80 };
+const subtitle = { color: "#94a3b8", marginBottom: 20 };
+const categoryTitle = { marginTop: 20, fontSize: 18, fontWeight: "bold", color: "#22c55e" };
+const card = { background: "#1e293b", padding: 15, borderRadius: 15, marginTop: 10 };
 const location = { color: "#94a3b8" };
 const status = { color: "#facc15", marginTop: 5 };
 const actions = { display: "flex", gap: 10, marginTop: 10 };
-
-const acceptBtn = {
-  flex: 1,
-  padding: 10,
-  background: "green",
-  border: "none",
-  borderRadius: 8,
-  color: "white",
-  cursor: "pointer"
-};
-
-const declineBtn = {
-  flex: 1,
-  padding: 10,
-  background: "#334155",
-  border: "none",
-  borderRadius: 8,
-  color: "white",
-  cursor: "pointer"
-};
+const acceptBtn = { flex: 1, padding: 10, background: "green", border: "none", borderRadius: 8, color: "white", cursor: "pointer" };
+const declineBtn = { flex: 1, padding: 10, background: "#334155", border: "none", borderRadius: 8, color: "white", cursor: "pointer" };
 
 export default Bookings;

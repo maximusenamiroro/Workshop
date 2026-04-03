@@ -1,67 +1,79 @@
 import React, { useState } from "react";
-import logo from "../assets/ws-logo.png";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "../../lib/supabaseClient";
+import logo from "../../assets/ws-logo.png";
 
 export default function ResetPassword() {
-  const [showPassword, setShowPassword] = useState(false);
+  const navigate = useNavigate();
+
+  const [email, setEmail] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  const handleReset = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`, // Change this if needed
+      });
+
+      if (error) throw error;
+
+      setMessage("Password reset link sent to your email. Check your inbox.");
+    } catch (err) {
+      setError(err.message || "Failed to send reset link");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
+    <div className="min-h-screen bg-[#0B0F19] flex items-center justify-center p-4 text-white">
+      <div className="bg-[#121826] p-10 rounded-3xl w-full max-w-md">
 
-      <div className="bg-white p-8 rounded-2xl shadow-lg w-full max-w-md">
-
-        {/* Logo */}
-        <div className="flex flex-col items-center mb-6">
-          <img
-            src={logo}
-            alt="Workshop Logo"
-            className="w-28 h-28 object-contain"
-          />
-
-          <h2 className="text-2xl font-bold text-green-800 mt-3">
-            Reset Password
-          </h2>
-
-          <p className="text-gray-500 text-sm text-center mt-1">
-            Enter OTP and create new password
+        <div className="flex flex-col items-center mb-10">
+          <img src={logo} alt="Workshop Logo" className="w-20 mb-4" />
+          <h2 className="text-3xl font-bold">Reset Password</h2>
+          <p className="text-gray-400 text-sm text-center mt-2">
+            Enter your email to receive a reset link
           </p>
         </div>
 
-        <form className="flex flex-col gap-4">
+        {error && <div className="bg-red-500/10 border border-red-500 text-red-400 p-4 rounded-2xl mb-6">{error}</div>}
+        {message && <div className="bg-green-500/10 border border-green-500 text-green-400 p-4 rounded-2xl mb-6">{message}</div>}
 
+        <form onSubmit={handleReset} className="space-y-6">
           <input
-            type="text"
-            placeholder="OTP Code"
-            className="border p-3 rounded-lg"
-          />
-
-          <input
-            type={showPassword ? "text" : "password"}
-            placeholder="New Password"
-            className="border p-3 rounded-lg"
-          />
-
-          <input
-            type={showPassword ? "text" : "password"}
-            placeholder="Confirm Password"
-            className="border p-3 rounded-lg"
+            type="email"
+            placeholder="Enter your email address"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            className="w-full p-4 bg-[#1a2332] rounded-2xl border border-gray-700 focus:border-green-500 outline-none"
           />
 
           <button
-            type="button"
-            onClick={() => setShowPassword(!showPassword)}
-            className="text-green-700 text-sm"
+            type="submit"
+            disabled={loading}
+            className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-600 py-4 rounded-2xl font-semibold text-lg transition"
           >
-            Show Password
+            {loading ? "Sending link..." : "Send Reset Link"}
           </button>
-
-          <button
-            className="bg-green-700 text-white py-3 rounded-lg"
-          >
-            Reset Password
-          </button>
-
         </form>
 
+        <div className="text-center mt-6">
+          <button
+            onClick={() => navigate("/login")}
+            className="text-green-400 hover:underline"
+          >
+            Back to Login
+          </button>
+        </div>
       </div>
     </div>
   );

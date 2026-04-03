@@ -5,9 +5,7 @@ const AuthContext = createContext();
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
+  if (!context) throw new Error("useAuth must be used within AuthProvider");
   return context;
 };
 
@@ -16,49 +14,39 @@ export const AuthProvider = ({ children }) => {
   const [role, setRole] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const loadUserProfile = async (userId) => {
+  const loadProfile = async (userId) => {
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("profiles")
         .select("role")
         .eq("id", userId)
         .single();
-
+      if (error) throw error;
       setRole(data?.role || null);
     } catch (err) {
-      console.error("Failed to load profile:", err);
+      console.error("Failed to load profile:", err.message);
       setRole(null);
     }
   };
 
   useEffect(() => {
-    const getCurrentUser = async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        
-        if (user) {
-          setUser(user);
-          await loadUserProfile(user.id);
-        } else {
-          setUser(null);
-          setRole(null);
-        }
-      } catch (err) {
-        console.error("Auth error:", err);
-        setUser(null);
-        setRole(null);
-      } finally {
-        setLoading(false);
+    // Fix: use getSession instead of getUser
+    const initAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        setUser(session.user);
+        await loadProfile(session.user.id);
       }
+      setLoading(false);
     };
 
-    getCurrentUser();
+    initAuth();
 
-    // Listen for auth changes
+    // Listen for auth changes (login, logout, token refresh)
     const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
         setUser(session.user);
-        await loadUserProfile(session.user.id);
+        await loadProfile(session.user.id);
       } else {
         setUser(null);
         setRole(null);
@@ -66,13 +54,13 @@ export const AuthProvider = ({ children }) => {
       setLoading(false);
     });
 
-    return () => {
-      listener.subscription.unsubscribe();
-    };
+    return () => listener.subscription.unsubscribe();
   }, []);
 
   const logout = async () => {
     await supabase.auth.signOut();
+    setUser(null);
+    setRole(null);
   };
 
   const value = {
@@ -86,7 +74,7 @@ export const AuthProvider = ({ children }) => {
 
   return (
     <AuthContext.Provider value={value}>
-      {children}
+      {!loading && children}
     </AuthContext.Provider>
   );
 };

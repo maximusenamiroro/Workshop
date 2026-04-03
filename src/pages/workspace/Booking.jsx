@@ -1,28 +1,27 @@
 import { useEffect, useState } from "react";
-import { supabase } from "../../lib/supabaseClient";   // ← Adjust path if needed
+import { supabase } from "../../lib/supabaseClient";
 
 function Bookings() {
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Fetch bookings from Supabase
   const loadBookings = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      const user = JSON.parse(localStorage.getItem("workspaceUser"));
+      const { data: { user } } = await supabase.auth.getUser();
 
-      if (!user?.id) {
-        setError("Please log in to view bookings");
+      if (!user) {
+        setError("Please log in to view your bookings");
         return;
       }
 
       const { data, error: supabaseError } = await supabase
-        .from("hire_requests")                    // ← Your bookings table
+        .from("orders")                          // Client uses "orders" table
         .select("*")
-        .eq("user_id", user.id)                   // Show only this user's bookings
+        .eq("user_id", user.id)
         .order("created_at", { ascending: false });
 
       if (supabaseError) throw supabaseError;
@@ -33,28 +32,6 @@ function Bookings() {
       setError("Failed to load bookings");
     } finally {
       setLoading(false);
-    }
-  };
-
-  // Approve tracking (update status in Supabase)
-  const approveTracking = async (booking) => {
-    try {
-      const { error: updateError } = await supabase
-        .from("hire_requests")
-        .update({
-          tracking_status: "Active",        // Use snake_case for Supabase
-          distance: "2.3 km",
-          updated_at: new Date().toISOString()
-        })
-        .eq("id", booking.id);
-
-      if (updateError) throw updateError;
-
-      alert("✅ Tracking Activated");
-      loadBookings();                       // Refresh the list
-    } catch (err) {
-      console.error("Error approving tracking:", err);
-      alert("Failed to approve tracking");
     }
   };
 
@@ -80,52 +57,29 @@ function Bookings() {
 
   return (
     <div style={container}>
-      <h2>Bookings</h2>
-      <p style={subtitle}>
-        Approve worker tracking and monitor jobs
-      </p>
+      <h2>Product Orders</h2>
+      <p style={subtitle}>Your placed orders</p>
 
       {bookings.length === 0 && (
-        <p>No bookings yet</p>
+        <p>No orders yet</p>
       )}
 
-      {bookings.map((job) => (
-        <div key={job.id} style={card}>
-          <h3>{job.worker_name || job.title}</h3>
-          <p>{job.job_description || job.description}</p>
-          <p>₦{job.price}</p>
-          <p style={location}>📍 {job.location}</p>
-          <p style={status}>Status: {job.status}</p>
-
-          {job.tracking_status && (
-            <p style={trackingStatus}>
-              Tracking: {job.tracking_status}
-            </p>
-          )}
-
-          <div style={actions}>
-            {job.tracking_status === "Waiting for Client" && (
-              <button
-                style={approveBtn}
-                onClick={() => approveTracking(job)}
-              >
-                Approve Tracking
-              </button>
-            )}
-
-            {job.tracking_status === "Active" && (
-              <button style={activeBtn}>
-                Tracking Active
-              </button>
-            )}
-          </div>
+      {bookings.map((order) => (
+        <div key={order.id} style={card}>
+          <h3>{order.product_name}</h3>
+          <p>₦{Number(order.price).toLocaleString()}</p>
+          <p>Quantity: {order.quantity}</p>
+          <p style={status}>Status: {order.status || "Processing"}</p>
+          <p style={time}>
+            {new Date(order.created_at).toLocaleDateString()}
+          </p>
         </div>
       ))}
     </div>
   );
 }
 
-// Keep your existing styles (you can later move them to Tailwind)
+// Styles
 const container = {
   background: "#0f172a",
   minHeight: "100vh",
@@ -134,40 +88,14 @@ const container = {
   paddingBottom: 80
 };
 
-const subtitle = {
-  color: "#94a3b8",
-  marginBottom: 20
-};
-
+const subtitle = { color: "#94a3b8", marginBottom: 20 };
 const card = {
   background: "#1e293b",
   padding: 15,
   borderRadius: 15,
   marginTop: 10
 };
-
-const location = { color: "#94a3b8" };
 const status = { color: "#22c55e" };
-const trackingStatus = { color: "#facc15", marginTop: 5 };
-const actions = { marginTop: 10 };
-
-const approveBtn = {
-  width: "100%",
-  padding: 10,
-  background: "#22c55e",
-  border: "none",
-  borderRadius: 8,
-  color: "white",
-  cursor: "pointer"
-};
-
-const activeBtn = {
-  width: "100%",
-  padding: 10,
-  background: "#334155",
-  border: "none",
-  borderRadius: 8,
-  color: "white"
-};
+const time = { color: "#94a3b8", marginTop: 5 };
 
 export default Bookings;

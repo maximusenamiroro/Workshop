@@ -1,26 +1,25 @@
 import React, { useState } from "react";
-import { supabase } from "../../lib/supabaseClient";   // ← Adjust the path to your supabaseClient
+import { supabase } from "../../lib/supabaseClient";
 
 const WorkerBookingCard = ({ booking, refresh }) => {
   const [loading, setLoading] = useState(false);
 
-  const updateBookingStatus = async (newStatus) => {
+  const updateStatus = async (newStatus) => {
     try {
       setLoading(true);
 
       const { error } = await supabase
-        .from("hire_requests")                    // ← Your bookings table
-        .update({ 
+        .from("hire_requests")
+        .update({
           status: newStatus,
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
         })
         .eq("id", booking.id);
 
       if (error) throw error;
 
-      // Refresh the parent list after successful update
+      // Refresh the parent dashboard
       if (refresh) refresh();
-
     } catch (err) {
       console.error("Error updating booking status:", err);
       alert("Failed to update status. Please try again.");
@@ -29,56 +28,53 @@ const WorkerBookingCard = ({ booking, refresh }) => {
     }
   };
 
-  const handleAccept = () => updateBookingStatus("accepted");
-  const handleReject = () => updateBookingStatus("cancelled");
-  const handleStart = () => updateBookingStatus("in-progress");
-  const handleComplete = () => updateBookingStatus("completed");
+  const handleAccept = () => updateStatus("accepted");
+  const handleReject = () => updateStatus("cancelled");
+  const handleStart = () => updateStatus("in-progress");
+  const handleComplete = () => updateStatus("completed");
 
   return (
-    <div className="bg-gray-900 p-4 rounded-xl border border-gray-800">
+    <div className="bg-gray-900 p-5 rounded-2xl border border-gray-800 hover:border-gray-700 transition-all">
 
-      <h2 className="text-white font-semibold">
-        {booking.worker_name || booking.workerName}
-      </h2>
+      <h3 className="text-white font-semibold text-lg mb-1">
+        {booking.job_description || "Job Request"}
+      </h3>
 
-      <p className="text-gray-400 text-sm">
-        Client: {booking.client_name || booking.clientName}
-      </p>
+      <div className="space-y-1 text-sm text-gray-400 mb-5">
+        <p>Client: {booking.clients?.full_name || booking.client_name || "Unknown Client"}</p>
+        <p>Location: {booking.location || "N/A"}</p>
+        <p>Price: ₦{Number(booking.price || 0).toLocaleString()}</p>
+      </div>
 
-      <p className="text-gray-400 text-sm">
-        Service: {booking.job_description || booking.service}
-      </p>
+      <div className="mb-4">
+        <span
+          className={`inline-block px-4 py-1.5 text-xs font-medium rounded-full capitalize
+            ${booking.status === "pending" ? "bg-yellow-500 text-black" :
+              booking.status === "accepted" ? "bg-blue-500" :
+              booking.status === "in-progress" ? "bg-green-500" :
+              booking.status === "completed" ? "bg-purple-500" : "bg-red-500"}`}
+        >
+          {booking.status || "Unknown"}
+        </span>
+      </div>
 
-      <p className="text-gray-400 text-sm">
-        Location: {booking.location}
-      </p>
-
-      <p className="text-gray-400 text-sm">
-        Price: ₦{booking.price?.toLocaleString() || booking.price}
-      </p>
-
-      <p className="text-gray-400 text-sm mt-2">
-        Status: <span className="capitalize">{booking.status}</span>
-      </p>
-
-      <div className="flex gap-2 mt-4 flex-wrap">
-
+      <div className="flex flex-wrap gap-3">
         {booking.status === "pending" && (
           <>
             <button
               onClick={handleAccept}
               disabled={loading}
-              className="bg-green-600 hover:bg-green-700 disabled:bg-green-800 px-5 py-2 rounded text-white font-medium transition"
+              className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-green-800 py-3 rounded-xl text-white font-medium transition"
             >
-              {loading ? "Processing..." : "Accept"}
+              {loading ? "Processing..." : "Accept Job"}
             </button>
 
             <button
               onClick={handleReject}
               disabled={loading}
-              className="bg-red-600 hover:bg-red-700 disabled:bg-red-800 px-5 py-2 rounded text-white font-medium transition"
+              className="flex-1 bg-red-600 hover:bg-red-700 disabled:bg-red-800 py-3 rounded-xl text-white font-medium transition"
             >
-              {loading ? "Processing..." : "Reject"}
+              {loading ? "Processing..." : "Decline"}
             </button>
           </>
         )}
@@ -87,7 +83,7 @@ const WorkerBookingCard = ({ booking, refresh }) => {
           <button
             onClick={handleStart}
             disabled={loading}
-            className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 px-5 py-2 rounded text-white font-medium transition"
+            className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 py-3 rounded-xl text-white font-medium transition"
           >
             {loading ? "Processing..." : "Start Work"}
           </button>
@@ -97,7 +93,7 @@ const WorkerBookingCard = ({ booking, refresh }) => {
           <button
             onClick={handleComplete}
             disabled={loading}
-            className="bg-purple-600 hover:bg-purple-700 disabled:bg-purple-800 px-5 py-2 rounded text-white font-medium transition"
+            className="flex-1 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-800 py-3 rounded-xl text-white font-medium transition"
           >
             {loading ? "Processing..." : "Mark as Completed"}
           </button>

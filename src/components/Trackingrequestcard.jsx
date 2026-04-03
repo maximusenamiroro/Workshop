@@ -1,67 +1,71 @@
-import React from "react";
-import { acceptTracking, rejectTracking } from "../pages/service/trackingService";
+import React, { useState } from "react";
+import { updateTrackingStatus } from "../pages/service/trackingService";   // Make sure this path is correct
 
 const TrackingRequestCard = ({ tracking, refresh }) => {
+  const [loading, setLoading] = useState(false);
 
-  const handleAccept = () => {
-    acceptTracking(tracking.id);
-    refresh();
+  const handleAccept = async () => {
+    try {
+      setLoading(true);
+      await updateTrackingStatus(tracking.id, "Active");
+      if (refresh) refresh();
+    } catch (err) {
+      alert("Failed to accept tracking");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleReject = () => {
-    rejectTracking(tracking.id);
-    refresh();
+  const handleReject = async () => {
+    try {
+      setLoading(true);
+      await updateTrackingStatus(tracking.id, "cancelled");
+      if (refresh) refresh();
+    } catch (err) {
+      alert("Failed to reject tracking");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="bg-gray-900 p-4 rounded-xl border border-gray-800">
+    <div className="bg-gray-900 p-5 rounded-2xl border border-gray-800">
 
-      <h2 className="text-white font-semibold">
-        {tracking.workerName}
-      </h2>
+      <h3 className="text-white font-semibold text-lg mb-2">
+        {tracking.worker_name || tracking.workerName}
+      </h3>
 
-      <p className="text-gray-400 text-sm">
-        Client: {tracking.clientName}
-      </p>
-
-      <p className="text-gray-400 text-sm">
-        Status: {tracking.status}
-      </p>
-
-      <p className="text-gray-400 text-sm">
-        Progress: {tracking.progress}
-      </p>
-
-      <p className="text-gray-400 text-sm">
-        Started: {tracking.startedAt}
-      </p>
+      <div className="text-sm text-gray-400 space-y-1 mb-4">
+        <p>Client: {tracking.client_name || tracking.clientName}</p>
+        <p>Status: {tracking.status}</p>
+        <p>Progress: {tracking.progress || "Not started"}</p>
+      </div>
 
       {tracking.status === "waiting" && (
-        <div className="flex gap-2 mt-4">
-
+        <div className="flex gap-3 mt-4">
           <button
             onClick={handleAccept}
-            className="bg-green-600 px-3 py-1 rounded text-white"
+            disabled={loading}
+            className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 py-3 rounded-xl text-white font-medium transition"
           >
-            Accept Tracking
+            {loading ? "Processing..." : "Accept Tracking"}
           </button>
 
           <button
             onClick={handleReject}
-            className="bg-red-600 px-3 py-1 rounded text-white"
+            disabled={loading}
+            className="flex-1 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 py-3 rounded-xl text-white font-medium transition"
           >
-            Reject Tracking
+            {loading ? "Processing..." : "Reject Tracking"}
           </button>
-
         </div>
       )}
 
       {tracking.status === "live" && (
-        <div className="mt-4 text-green-400">
-          Tracking Active
+        <div className="mt-4 text-green-400 font-medium">
+          ● Tracking Active
         </div>
       )}
-
     </div>
   );
 };

@@ -3,10 +3,16 @@
 import { supabase } from "../supabaseClient";
 
 /**
- * Get all bookings for a specific worker
+ * Get all bookings for the current logged-in worker
  */
-export const getWorkerBookings = async (workerId) => {
+export const getWorkerBookings = async () => {
   try {
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      throw new Error("User not authenticated");
+    }
+
     const { data, error } = await supabase
       .from("hire_requests")
       .select(`
@@ -15,7 +21,7 @@ export const getWorkerBookings = async (workerId) => {
           full_name
         )
       `)
-      .eq("worker_id", workerId)
+      .eq("worker_id", user.id)
       .order("created_at", { ascending: false });
 
     if (error) throw error;
@@ -28,7 +34,7 @@ export const getWorkerBookings = async (workerId) => {
 };
 
 /**
- * Update booking status (Accept, Reject, Start, Complete, etc.)
+ * Update booking status (Accept, Reject, Start, Complete, Cancel, etc.)
  */
 export const updateBookingStatus = async (bookingId, newStatus) => {
   try {
@@ -50,20 +56,25 @@ export const updateBookingStatus = async (bookingId, newStatus) => {
 };
 
 /**
- * Optional: Get a single booking by ID
+ * Get a single booking by ID
  */
 export const getBookingById = async (bookingId) => {
   try {
     const { data, error } = await supabase
       .from("hire_requests")
-      .select("*")
+      .select(`
+        *,
+        clients (
+          full_name
+        )
+      `)
       .eq("id", bookingId)
       .single();
 
     if (error) throw error;
     return data;
   } catch (err) {
-    console.error("Error fetching booking:", err);
+    console.error("Error fetching booking by ID:", err);
     throw err;
   }
 };

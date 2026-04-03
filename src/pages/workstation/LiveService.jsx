@@ -8,34 +8,43 @@ export default function LiveService() {
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
   const [loading, setLoading] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(true);
 
   // Load worker profile
   useEffect(() => {
     const loadProfile = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
 
-      if (!user) return;
+        if (!user) {
+          setProfileLoading(false);
+          return;
+        }
 
-      const { data, error } = await supabase
-        .from("workers")
-        .select("*")
-        .eq("id", user.id)
-        .single();
+        const { data, error } = await supabase
+          .from("workers")
+          .select("*")
+          .eq("id", user.id)
+          .single();
 
-      if (error) {
-        console.error(error);
-        return;
+        if (error) {
+          console.error("Error loading worker profile:", error);
+        } else {
+          setProfile(data);
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setProfileLoading(false);
       }
-
-      setProfile(data);
     };
 
     loadProfile();
   }, []);
 
   const goLive = async () => {
-    if (!profile || !description || !price) {
-      alert("Please fill in description and price");
+    if (!profile || !description.trim() || !price) {
+      alert("Please fill in both description and price");
       return;
     }
 
@@ -56,13 +65,13 @@ export default function LiveService() {
       };
 
       const { error } = await supabase
-        .from("live_workers")           // Create this table
+        .from("live_workers")
         .upsert([liveData], { onConflict: "worker_id" });
 
       if (error) throw error;
 
       setIsLive(true);
-      alert("✅ You are now Live in Workspace!");
+      alert("✅ You are now Live! Clients can see you.");
     } catch (err) {
       console.error(err);
       alert("Failed to go live. Please try again.");
@@ -71,10 +80,18 @@ export default function LiveService() {
     }
   };
 
+  if (profileLoading) {
+    return (
+      <div className="bg-[#0B0F19] min-h-screen p-4 text-white flex items-center justify-center">
+        <p>Loading your profile...</p>
+      </div>
+    );
+  }
+
   if (!profile) {
     return (
       <div className="bg-[#0B0F19] min-h-screen p-4 text-white flex items-center justify-center">
-        <p>No profile found. Please complete your worker profile first.</p>
+        <p>No worker profile found. Please complete your profile first.</p>
       </div>
     );
   }
@@ -129,7 +146,7 @@ export default function LiveService() {
       {/* Go Live Button */}
       <button
         onClick={goLive}
-        disabled={loading || !description || !price}
+        disabled={loading || !description.trim() || !price}
         className="w-full bg-green-500 hover:bg-green-600 disabled:bg-green-700 disabled:cursor-not-allowed p-4 rounded-xl font-semibold text-lg transition"
       >
         {loading ? "Going Live..." : "Go Live Now"}

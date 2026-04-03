@@ -1,191 +1,131 @@
+// src/services/trackingService.js
+
 import { supabase } from "../../lib/supabaseClient";
 
 /**
- * ===============================
- * CREATE TRACKING REQUEST
- * client requests worker tracking
- * ===============================
+ * Get all tracking records for the current logged-in worker
  */
-export const createTrackingRequest = async (data) => {
+export const getWorkerTracking = async () => {
   try {
-    const { data: result, error } = await supabase
-      .from("tracking_requests")
-      .insert([data])
-      .select();
+    const { data: { user } } = await supabase.auth.getUser();
 
-    if (error) throw error;
-    return result[0];
-  } catch (error) {
-    console.error("Create tracking error:", error.message);
-    return null;
-  }
-};
+    if (!user) {
+      throw new Error("User not authenticated");
+    }
 
-/**
- * ===============================
- * GET TRACKING REQUESTS
- * ===============================
- */
-export const getTrackingRequests = async (userId) => {
-  try {
     const { data, error } = await supabase
-      .from("tracking_requests")
+      .from("hire_requests")
       .select("*")
-      .or(`client_id.eq.${userId},worker_id.eq.${userId}`)
+      .eq("worker_id", user.id)
+      .in("status", ["accepted", "in-progress"])
       .order("created_at", { ascending: false });
 
     if (error) throw error;
-    return data;
-  } catch (error) {
-    console.error("Fetch tracking error:", error.message);
-    return [];
+
+    return data || [];
+  } catch (err) {
+    console.error("Error fetching worker tracking:", err);
+    throw err;
   }
 };
 
 /**
- * ===============================
- * ACCEPT TRACKING (worker accepts)
- * ===============================
+ * Create a new tracking request (Worker starts tracking)
  */
-export const acceptTracking = async (trackingId) => {
+export const createTrackingRequest = async (hireRequestId) => {
   try {
-    const { data, error } = await supabase
-      .from("tracking_requests")
+    const { error } = await supabase
+      .from("hire_requests")
       .update({
-        status: "accepted",
-        accepted_at: new Date()
+        tracking_status: "Waiting for Client",
+        distance: "0 km",
+        updated_at: new Date().toISOString(),
       })
-      .eq("id", trackingId)
-      .select();
+      .eq("id", hireRequestId);
 
     if (error) throw error;
-    return data[0];
-  } catch (error) {
-    console.error("Accept tracking error:", error.message);
-    return null;
+    return true;
+  } catch (err) {
+    console.error("Error creating tracking request:", err);
+    throw err;
   }
 };
 
 /**
- * ===============================
- * START TRACKING
- * ===============================
+ * Update tracking status
  */
-export const startTracking = async (trackingId) => {
+export const updateTrackingStatus = async (hireRequestId, newStatus) => {
   try {
-    const { data, error } = await supabase
-      .from("tracking_requests")
+    const { error } = await supabase
+      .from("hire_requests")
       .update({
-        status: "tracking",
-        started_at: new Date()
+        tracking_status: newStatus,
+        updated_at: new Date().toISOString(),
       })
-      .eq("id", trackingId)
-      .select();
+      .eq("id", hireRequestId);
 
     if (error) throw error;
-    return data[0];
-  } catch (error) {
-    console.error("Start tracking error:", error.message);
-    return null;
+    return true;
+  } catch (err) {
+    console.error("Error updating tracking status:", err);
+    throw err;
   }
 };
 
 /**
- * ===============================
- * UPDATE WORKER LOCATION
- * ===============================
+ * Update tracking progress / distance
  */
-export const updateWorkerLocation = async (
-  trackingId,
-  latitude,
-  longitude
-) => {
+export const updateTrackingProgress = async (hireRequestId, distance) => {
   try {
-    const { data, error } = await supabase
-      .from("tracking_requests")
+    const { error } = await supabase
+      .from("hire_requests")
       .update({
-        worker_lat: latitude,
-        worker_lng: longitude,
-        updated_at: new Date()
+        distance: distance,
+        updated_at: new Date().toISOString(),
       })
-      .eq("id", trackingId)
-      .select();
+      .eq("id", hireRequestId);
 
     if (error) throw error;
-    return data[0];
-  } catch (error) {
-    console.error("Location update error:", error.message);
-    return null;
+    return true;
+  } catch (err) {
+    console.error("Error updating tracking progress:", err);
+    throw err;
   }
 };
 
 /**
- * ===============================
- * END TRACKING
- * ===============================
+ * Complete a tracking job
  */
-export const endTracking = async (trackingId) => {
+export const completeTrackingJob = async (hireRequestId) => {
   try {
-    const { data, error } = await supabase
-      .from("tracking_requests")
+    const { error } = await supabase
+      .from("hire_requests")
       .update({
         status: "completed",
-        ended_at: new Date()
+        tracking_status: "Completed",
+        completed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       })
-      .eq("id", trackingId)
-      .select();
+      .eq("id", hireRequestId);
 
     if (error) throw error;
-    return data[0];
-  } catch (error) {
-    console.error("End tracking error:", error.message);
-    return null;
+    return true;
+  } catch (err) {
+    console.error("Error completing tracking job:", err);
+    throw err;
   }
 };
 
 /**
- * ===============================
- * REALTIME TRACKING SUBSCRIPTION
- * ===============================
+ * Accept Tracking Request (used by TrackingRequestCard)
  */
-export const subscribeToTracking = (trackingId, callback) => {
-  return supabase
-    .channel("tracking-updates")
-    .on(
-      "postgres_changes",
-      {
-        event: "UPDATE",
-        schema: "public",
-        table: "tracking_requests",
-        filter: `id=eq.${trackingId}`
-      },
-      (payload) => {
-        callback(payload.new);
-      }
-    )
-    .subscribe();
+export const acceptTracking = async (hireRequestId) => {
+  return updateTrackingStatus(hireRequestId, "Active");
 };
 
 /**
- * ===============================
- * REJECT TRACKING
- * ===============================
+ * Reject Tracking Request (used by TrackingRequestCard)
  */
-export const rejectTracking = async (trackingId) => {
-  try {
-    const { data, error } = await supabase
-      .from("tracking_requests")
-      .update({
-        status: "rejected",
-        rejected_at: new Date()
-      })
-      .eq("id", trackingId)
-      .select();
-
-    if (error) throw error;
-    return data[0];
-  } catch (error) {
-    console.error("Reject tracking error:", error.message);
-    return null;
-  }
+export const rejectTracking = async (hireRequestId) => {
+  return updateTrackingStatus(hireRequestId, "cancelled");
 };

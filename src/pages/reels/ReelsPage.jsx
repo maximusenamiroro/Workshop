@@ -26,6 +26,7 @@ const mockReels = [
   },
 ];
 
+
 // ---------------- MAIN ----------------
 export default function ReelsPage() {
   return (
