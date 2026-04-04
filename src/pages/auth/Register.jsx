@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
-import { FiEye, FiEyeOff } from "react-icons/fi";
+import { FaEye, FaEyeSlash } from "react-icons/fa";
 
 export default function Signup() {
   const navigate = useNavigate();
@@ -13,10 +13,19 @@ export default function Signup() {
     country: "",
     accountType: "client",
     category: "",
+    otherCategory: "",
     password: "",
+    location: "",
   });
 
-  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [showPassword, setShowPassword] = useState(false); // <- password visibility toggle
+
+  const handworkList = ["Carpenter", "Plumber", "Electrician", "Mechanic", "Tailor", "Welder", "Painter", "Bricklayer", "Barber", "Shoemaker", "Technician"];
+  const hireList = ["Cleaner", "Driver", "Security", "Assistant", "Delivery Agent", "Office Helper"];
+  const productList = ["Home Supplies", "Electronics", "Fashion", "Mechanical", "Food", "Office Tools"];
+  const countries = ["Nigeria", "Ghana", "Kenya", "South Africa", "United States", "United Kingdom", "Canada", "India", "Germany", "France"];
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -24,112 +33,167 @@ export default function Signup() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setLoading(true);
+    setError("");
+
+    if (!form.name || !form.email || !form.password) {
+      setError("Please fill name, email and password");
+      setLoading(false);
+      return;
+    }
+
+    if (form.accountType === "worker" && !form.category) {
+      setError("Please select a category");
+      setLoading(false);
+      return;
+    }
+
+    if (form.category === "Other" && !form.otherCategory) {
+      setError("Please specify your category");
+      setLoading(false);
+      return;
+    }
+
     try {
-      const { data, error } = await supabase.auth.signUp({
+      // 1. Create user in Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
         email: form.email,
         password: form.password,
       });
-      if (error) throw error;
 
-      navigate("/welcome"); // adjust as needed
-    } catch (error) {
-      console.error("Signup error:", error.message);
+      if (authError) throw authError;
+
+      if (authData.user) {
+        // 2. Create profile
+        const { error: profileError } = await supabase.from("profiles").insert({
+          id: authData.user.id,
+          full_name: form.name,
+          phone: form.phone || null,
+          role: form.accountType,
+        });
+
+        if (profileError) throw profileError;
+
+        // 3. If Worker, create worker record
+        if (form.accountType === "worker") {
+          const workerCategory = form.category === "Other" ? form.otherCategory : form.category;
+
+          const { error: workerError } = await supabase.from("workers").insert({
+            id: authData.user.id,
+            category: workerCategory || "General",
+            hand_skill: handworkList.includes(workerCategory),
+            location: form.location || null,
+          });
+
+          if (workerError) console.error("Worker record error:", workerError);
+        }
+
+        alert(`✅ Account created successfully as ${form.accountType}!`);
+        navigate("/reels");
+      }
+    } catch (err) {
+      console.error(err);
+      setError(err.message || "Failed to create account");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-black">
-      <form className="bg-gray-900 p-8 rounded-lg shadow-lg w-full max-w-md" onSubmit={handleSubmit}>
-        <h2 className="text-2xl font-bold text-white mb-6 text-center">Sign Up</h2>
-
-        <input
-          type="text"
-          name="name"
-          placeholder="Name"
-          value={form.name}
-          onChange={handleChange}
-          required
-          className="w-full p-3 mb-4 rounded-lg bg-gray-800 text-white border border-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-
-        <input
-          type="text"
-          name="phone"
-          placeholder="Phone"
-          value={form.phone}
-          onChange={handleChange}
-          required
-          className="w-full p-3 mb-4 rounded-lg bg-gray-800 text-white border border-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-
-        <input
-          type="email"
-          name="email"
-          placeholder="Email"
-          value={form.email}
-          onChange={handleChange}
-          required
-          className="w-full p-3 mb-4 rounded-lg bg-gray-800 text-white border border-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-
-        <input
-          type="text"
-          name="country"
-          placeholder="Country"
-          value={form.country}
-          onChange={handleChange}
-          required
-          className="w-full p-3 mb-4 rounded-lg bg-gray-800 text-white border border-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-
-        <select
-          name="accountType"
-          value={form.accountType}
-          onChange={handleChange}
-          className="w-full p-3 mb-4 rounded-lg bg-gray-800 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="client">Client</option>
-          <option value="worker">Worker</option>
-        </select>
-
-        {form.accountType === "worker" && (
-          <input
-            type="text"
-            name="category"
-            placeholder="Category"
-            value={form.category}
-            onChange={handleChange}
-            required
-            className="w-full p-3 mb-4 rounded-lg bg-gray-800 text-white border border-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        )}
-
-        {/* Password input with eye icon */}
-        <div className="relative mb-6">
-          <input
-            type={showPassword ? "text" : "password"}
-            name="password"
-            placeholder="Password"
-            value={form.password}
-            onChange={handleChange}
-            required
-            className="w-full p-3 rounded-lg bg-gray-800 text-white border border-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <span
-            onClick={() => setShowPassword(!showPassword)}
-            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-300 cursor-pointer"
-          >
-            {showPassword ? <FiEyeOff size={20} /> : <FiEye size={20} />}
-          </span>
+    <div className="min-h-screen bg-[#0B0F19] text-white p-4 flex items-center justify-center">
+      <div className="w-full max-w-md">
+        <div className="text-center mb-10">
+          <h1 className="text-3xl font-bold">Create Account</h1>
+          <p className="text-gray-400 mt-2">Join Workshop</p>
         </div>
 
-        <button
-          type="submit"
-          className="w-full bg-blue-600 text-white p-3 rounded-lg hover:bg-blue-700 transition"
-        >
-          Sign Up
-        </button>
-      </form>
+        {error && <div className="bg-red-500/10 border border-red-500 text-red-400 p-4 rounded-2xl mb-6">{error}</div>}
+
+        <form onSubmit={handleSubmit} className="space-y-5">
+
+          {/* Account Type Buttons */}
+          <div className="flex gap-3 mb-6">
+            <button
+              type="button"
+              onClick={() => setForm({ ...form, accountType: "client", category: "", otherCategory: "" })}
+              className={`flex-1 py-4 rounded-2xl font-medium ${form.accountType === "client" ? "bg-green-500" : "bg-gray-800"}`}
+            >
+              Client
+            </button>
+            <button
+              type="button"
+              onClick={() => setForm({ ...form, accountType: "worker" })}
+              className={`flex-1 py-4 rounded-2xl font-medium ${form.accountType === "worker" ? "bg-green-500" : "bg-gray-800"}`}
+            >
+              Worker
+            </button>
+          </div>
+
+          {/* Basic Info */}
+          <input type="text" name="name" placeholder="Full Name *" value={form.name} onChange={handleChange} required className="w-full p-4 bg-[#121826] rounded-2xl" />
+          <input type="email" name="email" placeholder="Email *" value={form.email} onChange={handleChange} required className="w-full p-4 bg-[#121826] rounded-2xl" />
+          <input type="tel" name="phone" placeholder="Phone Number" value={form.phone} onChange={handleChange} className="w-full p-4 bg-[#121826] rounded-2xl" />
+
+          {/* Country */}
+          <select name="country" value={form.country} onChange={handleChange} className="w-full p-4 bg-[#121826] rounded-2xl" required>
+            <option value="">Select Country *</option>
+            {countries.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+
+          {/* Worker Category */}
+          {form.accountType === "worker" && (
+            <>
+              <select name="category" value={form.category} onChange={handleChange} className="w-full p-4 bg-[#121826] rounded-2xl" required>
+                <option value="">Select Category *</option>
+                {[...handworkList, ...hireList, ...productList, "Other"].map(item => (
+                  <option key={item} value={item}>{item}</option>
+                ))}
+              </select>
+
+              {form.category === "Other" && (
+                <input
+                  type="text"
+                  name="otherCategory"
+                  placeholder="Specify your category"
+                  value={form.otherCategory}
+                  onChange={handleChange}
+                  className="w-full p-4 bg-[#121826] rounded-2xl mt-3"
+                  required
+                />
+              )}
+            </>
+          )}
+
+          {/* Password with hide/show */}
+          <div className="relative">
+            <input
+              type={showPassword ? "text" : "password"}
+              name="password"
+              placeholder="Password *"
+              value={form.password}
+              onChange={handleChange}
+              required
+              className="w-full p-4 bg-[#121826] rounded-2xl pr-12"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute top-1/2 right-4 -translate-y-1/2 text-gray-400"
+            >
+              {showPassword ? <FaEyeSlash /> : <FaEye />}
+            </button>
+          </div>
+
+          {/* Submit */}
+          <button 
+            type="submit" 
+            disabled={loading}
+            className="w-full bg-green-500 py-4 rounded-2xl font-semibold text-lg disabled:bg-gray-600"
+          >
+            {loading ? "Creating Account..." : `Create ${form.accountType === "worker" ? "Worker" : "Client"} Account`}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }
