@@ -1,7 +1,8 @@
+
+
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
-import logo from "../../assets/ws-logo.png";   // Adjust path if needed
 
 export default function Login() {
   const navigate = useNavigate();
@@ -25,7 +26,6 @@ export default function Login() {
 
       if (signInError) throw signInError;
 
-      // On successful login, it will automatically redirect via ProtectedRoute
       navigate("/reels");
     } catch (err) {
       setError(err.message || "Invalid email or password");
@@ -39,7 +39,9 @@ export default function Login() {
       <div className="bg-[#121826] p-10 rounded-3xl w-full max-w-md">
 
         <div className="flex flex-col items-center mb-10">
-          <img src={logo} alt="Workshop Logo" className="w-20 mb-4" />
+          <div className="w-16 h-16 bg-green-500 rounded-2xl flex items-center justify-center mb-4">
+            <span className="text-2xl font-bold text-white">W</span>
+          </div>
           <h2 className="text-3xl font-bold text-white">Welcome Back</h2>
           <p className="text-gray-400 mt-1">Sign in to your account</p>
         </div>
@@ -57,7 +59,7 @@ export default function Login() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
-            className="w-full p-4 bg-[#1a2332] rounded-2xl border border-gray-700 focus:border-green-500 outline-none"
+            className="w-full p-4 bg-[#1a2332] text-white rounded-2xl border border-gray-700 focus:border-green-500 outline-none"
           />
 
           <div className="relative">
@@ -67,7 +69,7 @@ export default function Login() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="w-full p-4 bg-[#1a2332] rounded-2xl border border-gray-700 focus:border-green-500 outline-none"
+              className="w-full p-4 bg-[#1a2332] text-white rounded-2xl border border-gray-700 focus:border-green-500 outline-none"
             />
             <button
               type="button"
@@ -81,24 +83,23 @@ export default function Login() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-600 py-4 rounded-2xl font-semibold text-lg transition"
+            className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-600 py-4 rounded-2xl font-semibold text-lg transition text-white"
           >
             {loading ? "Signing in..." : "Login"}
           </button>
         </form>
 
         <div className="text-center mt-8 space-y-3">
-          <p 
+          <p
             onClick={() => navigate("/reset-password")}
             className="text-green-400 cursor-pointer hover:underline text-sm"
           >
             Forgot Password?
           </p>
-
           <p className="text-gray-400">
             Don't have an account?{" "}
-            <span 
-              onClick={() => navigate("/signup")} 
+            <span
+              onClick={() => navigate("/signup")}
               className="text-green-400 cursor-pointer hover:underline"
             >
               Sign up

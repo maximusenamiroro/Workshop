@@ -1,22 +1,23 @@
 import { useEffect, useState } from "react";
-import { supabase } from "../../lib/supabaseClient";   // ← Adjust path if needed
+import { supabase } from "../../lib/supabaseClient";
+import { useAuth } from "../../context/AuthContext";
 
 const Tracking = () => {
+  const { user } = useAuth();
   const [tracking, setTracking] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Fetch tracking data from Supabase
   const loadTracking = async () => {
     try {
       setLoading(true);
-
       const { data, error } = await supabase
-        .from("tracking")                    // ← Change if your table name is different
-        .select("*")
+        .from("hire_requests")
+        .select("id, job_description, location, status, created_at")
+        .eq("client_id", user.id)
+        .in("status", ["accepted", "in_progress"])
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-
       setTracking(data || []);
     } catch (error) {
       console.error("Error fetching tracking:", error);
@@ -25,32 +26,22 @@ const Tracking = () => {
     }
   };
 
-  // Real-time subscription (much better than setInterval)
   useEffect(() => {
+    if (!user) return;
     loadTracking();
 
-    // Subscribe to real-time changes
-    const subscription = supabase
-      .channel("tracking_changes")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",                     // Listen to INSERT, UPDATE, DELETE
-          schema: "public",
-          table: "tracking",              // ← Your table name
-        },
-        (payload) => {
-          console.log("Change received!", payload);
-          loadTracking();                 // Refresh data when anything changes
-        }
-      )
+    const channel = supabase
+      .channel(`tracking_${user.id}`)
+      .on("postgres_changes", {
+        event: "UPDATE",
+        schema: "public",
+        table: "hire_requests",
+        filter: `client_id=eq.${user.id}`,
+      }, () => loadTracking())
       .subscribe();
 
-    // Cleanup subscription when component unmounts
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, []);
+    return () => supabase.removeChannel(channel);
+  }, [user]);
 
   if (loading) {
     return (
@@ -63,40 +54,36 @@ const Tracking = () => {
   return (
     <div className="bg-[#0f172a] min-h-screen text-white p-5 pb-20">
       <h2 className="text-2xl font-bold mb-2">Tracking</h2>
-      <p className="text-slate-400 mb-6">
-        Monitor worker distance and job progress
-      </p>
+      <p className="text-slate-400 mb-6">Monitor your active job requests</p>
 
       {tracking.length === 0 ? (
-        <p className="text-slate-400 text-center py-10">No active tracking</p>
+        <div className="text-center mt-20">
+          <p className="text-4xl mb-4">📍</p>
+          <p className="text-slate-400">No active jobs being tracked</p>
+        </div>
       ) : (
         tracking.map((job) => (
-          <div
-            key={job.id}
-            className="bg-[#1e293b] p-5 rounded-2xl mb-4"
-          >
-            <h3 className="text-lg font-semibold mb-1">{job.title}</h3>
-            <p className="text-slate-300 text-sm mb-3">{job.description}</p>
-
-            <div className="space-y-2 text-sm">
-              <p>₦{job.price?.toLocaleString()}</p>
-              <p>📍 {job.location}</p>
-              <p className="text-green-400">
-                Status: {job.trackingStatus || "Unknown"}
-              </p>
-
-              {job.distance && (
-                <p className="text-yellow-400 font-bold">
-                  Distance Covered: {job.distance}
-                </p>
+          <div key={job.id} className="bg-[#1e293b] p-5 rounded-2xl mb-4">
+            <h3 className="text-lg font-semibold mb-1">
+              {job.job_description || "Job Request"}
+            </h3>
+            <p className="text-slate-300 text-sm mb-3">📍 {job.location}</p>
+            <div className="flex items-center gap-2">
+              <span className={`text-xs px-3 py-1 rounded-full font-medium ${
+                job.status === "accepted"
+                  ? "bg-green-500/20 text-green-400"
+                  : job.status === "in_progress"
+                  ? "bg-blue-500/20 text-blue-400"
+                  : "bg-yellow-500/20 text-yellow-400"
+              }`}>
+                {job.status}
+              </span>
+              {job.status === "in_progress" && (
+                <span className="text-xs bg-green-500/10 text-green-400 px-3 py-1 rounded-full">
+                  ● Live Tracking
+                </span>
               )}
             </div>
-
-            {job.trackingStatus === "Active" && (
-              <div className="mt-4 inline-flex items-center gap-2 bg-green-500/10 text-green-400 px-4 py-1.5 rounded-full text-sm font-medium">
-                ● Live Kilometer Tracking
-              </div>
-            )}
           </div>
         ))
       )}

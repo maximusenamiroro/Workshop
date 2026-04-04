@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabaseClient";
-import CategoryGroup from "../../components/CategoryGroup";
-import SearchBar from "../../components/SearchBar";
+import { useNavigate } from "react-router-dom";
 
 export default function LiveService() {
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [liveWorkers, setLiveWorkers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -15,12 +15,11 @@ export default function LiveService() {
       setError(null);
 
       const { data, error: supabaseError } = await supabase
-        .from("workers")                    // ← Change if your table name is different
-        .select("*")
-        .order("created_at", { ascending: false });
+        .from("live_workers")
+        .select("id, service, worker_id, profiles(full_name)")
+        .order("updated_at", { ascending: false });
 
       if (supabaseError) throw supabaseError;
-
       setLiveWorkers(data || []);
     } catch (err) {
       console.error("Error fetching live workers:", err);
@@ -32,33 +31,28 @@ export default function LiveService() {
 
   useEffect(() => {
     fetchLiveWorkers();
+
+    // Real-time updates
+    const channel = supabase
+      .channel("live_workers_changes")
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "live_workers",
+      }, () => fetchLiveWorkers())
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
   }, []);
 
-  // Search filter
-  const filtered = liveWorkers.filter((item) =>
-    item.name?.toLowerCase().includes(search.toLowerCase()) ||
-    item.category?.toLowerCase().includes(search.toLowerCase()) ||
-    item.location?.toLowerCase().includes(search.toLowerCase())
+  const filtered = liveWorkers.filter((w) =>
+    w.service?.toLowerCase().includes(search.toLowerCase()) ||
+    w.profiles?.full_name?.toLowerCase().includes(search.toLowerCase())
   );
-
-  // Grouping logic
-  const bookWorkers = filtered.filter(
-    (w) => w.type === "worker" && w.handSkill && w.live
-  );
-
-  const hireWorkers = filtered.filter(
-    (w) => w.type === "worker" && !w.handSkill && w.live
-  );
-
-  const productSellers = filtered.filter(
-    (w) => w.type === "product" && w.live
-  );
-
-  const nearbyWorkers = filtered.filter((w) => !w.live);
 
   if (loading) {
     return (
-      <div className="bg-[#0B0F19] min-h-screen p-4 flex items-center justify-center">
+      <div className="bg-[#0B0F19] min-h-screen flex items-center justify-center">
         <p className="text-gray-400">Loading live services...</p>
       </div>
     );
@@ -66,49 +60,52 @@ export default function LiveService() {
 
   if (error) {
     return (
-      <div className="bg-[#0B0F19] min-h-screen p-4 flex items-center justify-center">
+      <div className="bg-[#0B0F19] min-h-screen flex items-center justify-center">
         <p className="text-red-400">{error}</p>
       </div>
     );
   }
 
   return (
-    <div className="bg-[#0B0F19] min-h-screen p-4">
-      {/* Title */}
-      <h1 className="text-white text-xl font-semibold mb-4">
-        Live Services
-      </h1>
+    <div className="bg-[#0B0F19] min-h-screen p-4 text-white">
+      <h1 className="text-xl font-semibold mb-4">Live Services</h1>
 
       {/* Search */}
-      <SearchBar search={search} setSearch={setSearch} />
-
-      {/* Book Workers */}
-      <CategoryGroup
-        title="Book Workers"
-        workers={bookWorkers}
-        liveOnly={true}
+      <input
+        type="text"
+        placeholder="Search by service or name..."
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        className="w-full p-3 mb-6 bg-white/10 rounded-xl text-white placeholder-gray-500 outline-none"
       />
 
-      {/* Hire Workers */}
-      <CategoryGroup
-        title="Hire Workers"
-        workers={hireWorkers}
-        liveOnly={true}
-      />
-
-      {/* Order Products */}
-      <CategoryGroup
-        title="Order Products"
-        workers={productSellers}
-        liveOnly={true}
-      />
-
-      {/* Nearby Workers */}
-      <CategoryGroup
-        title="Nearby Workers"
-        workers={nearbyWorkers}
-        liveOnly={false}
-      />
+      {filtered.length === 0 ? (
+        <div className="text-center mt-20">
+          <p className="text-4xl mb-4">😴</p>
+          <p className="text-gray-400">No workers are live right now.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filtered.map((w) => (
+            <div
+              key={w.id}
+              className="bg-white/5 border border-white/10 p-4 rounded-xl flex justify-between items-center"
+            >
+              <div>
+                <p className="font-semibold">{w.profiles?.full_name || "Worker"}</p>
+                <p className="text-sm text-gray-400">{w.service}</p>
+                <p className="text-xs text-green-400 mt-1">🟢 Live now</p>
+              </div>
+              <button
+                onClick={() => navigate(`/hire-worker/${w.worker_id}`)}
+                className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-xl text-sm font-semibold transition"
+              >
+                Hire
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

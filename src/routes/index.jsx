@@ -7,7 +7,7 @@ import MainLayout from "../layouts/MainLayout";
 // Pages
 import Landing from "../pages/Landing";
 import Login from "../pages/auth/Login";
-import Signup from "../pages/auth/Register";        // You named it Register
+import Signup from "../pages/auth/Register"; // You named it Register
 import ResetPassword from "../pages/auth/resetpassword";
 import ReelsPage from "../pages/reels/ReelsPage";
 import Workspace from "../pages/Buyerworkspace";
@@ -202,7 +202,17 @@ export default function AppRoutes() {
         <Route
           path="/hire-worker"
           element={
-            <ProtectedRoute allowedRoles={["worker"]}>
+            <ProtectedRoute allowedRoles={["client"]}>
+              <MainLayout>
+                <HireWorker />
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/hire-worker/:id"
+          element={
+            <ProtectedRoute allowedRoles={["client"]}>
               <MainLayout>
                 <HireWorker />
               </MainLayout>

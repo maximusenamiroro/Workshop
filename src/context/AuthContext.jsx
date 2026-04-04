@@ -30,7 +30,6 @@ export const AuthProvider = ({ children }) => {
   };
 
   useEffect(() => {
-    // Fix: use getSession instead of getUser
     const initAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
@@ -42,14 +41,16 @@ export const AuthProvider = ({ children }) => {
 
     initAuth();
 
-    // Listen for auth changes (login, logout, token refresh)
     const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === "SIGNED_OUT") {
+        setUser(null);
+        setRole(null);
+        setLoading(false);
+        return;
+      }
       if (session?.user) {
         setUser(session.user);
         await loadProfile(session.user.id);
-      } else {
-        setUser(null);
-        setRole(null);
       }
       setLoading(false);
     });
@@ -58,9 +59,14 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const logout = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
-    setRole(null);
+    try {
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.error("Logout error:", err.message);
+    } finally {
+      setUser(null);
+      setRole(null);
+    }
   };
 
   const value = {
