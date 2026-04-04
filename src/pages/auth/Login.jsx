@@ -38,9 +38,6 @@ export default function Login() {
       <div className="bg-[#121826] p-10 rounded-3xl w-full max-w-md">
 
         <div className="flex flex-col items-center mb-10">
-          <div className="w-16 h-16 bg-green-500 rounded-2xl flex items-center justify-center mb-4">
-            <span className="text-2xl font-bold text-white">W</span>
-          </div>
           <h2 className="text-3xl font-bold text-white">Welcome Back</h2>
           <p className="text-gray-400 mt-1">Sign in to your account</p>
         </div>
