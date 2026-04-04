@@ -25,12 +25,15 @@ export default function Signup() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      // Supabase signup
       const { data, error } = await supabase.auth.signUp({
         email: form.email,
         password: form.password,
       });
       if (error) throw error;
-      navigate("/welcome"); // adjust redirect as needed
+
+      // Redirect after signup
+      navigate("/welcome"); // adjust this as needed
     } catch (error) {
       console.error("Signup error:", error.message);
     }
@@ -71,6 +74,7 @@ export default function Signup() {
           onChange={handleChange}
           required
         />
+
         <select
           name="accountType"
           value={form.accountType}
@@ -79,6 +83,7 @@ export default function Signup() {
           <option value="client">Client</option>
           <option value="worker">Worker</option>
         </select>
+
         {form.accountType === "worker" && (
           <input
             type="text"
@@ -89,7 +94,8 @@ export default function Signup() {
             required
           />
         )}
-        {/* Password field with hide/show */}
+
+        {/* Password field with hide/show toggle */}
         <div style={{ position: "relative" }}>
           <input
             type={showPassword ? "text" : "password"}
@@ -110,11 +116,13 @@ export default function Signup() {
               background: "transparent",
               border: "none",
               cursor: "pointer",
+              fontWeight: "bold",
             }}
           >
             {showPassword ? "Hide" : "Show"}
           </button>
         </div>
+
         <button type="submit">Sign Up</button>
       </form>
     </div>
