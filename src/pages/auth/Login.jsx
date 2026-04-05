@@ -1,8 +1,7 @@
-
-
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
+import { FaEye, FaEyeSlash } from "react-icons/fa";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -39,9 +38,6 @@ export default function Login() {
       <div className="bg-[#121826] p-10 rounded-3xl w-full max-w-md">
 
         <div className="flex flex-col items-center mb-10">
-          <div className="w-16 h-16 bg-green-500 rounded-2xl flex items-center justify-center mb-4">
-            <span className="text-2xl font-bold text-white">W</span>
-          </div>
           <h2 className="text-3xl font-bold text-white">Welcome Back</h2>
           <p className="text-gray-400 mt-1">Sign in to your account</p>
         </div>
@@ -69,14 +65,14 @@ export default function Login() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="w-full p-4 bg-[#1a2332] text-white rounded-2xl border border-gray-700 focus:border-green-500 outline-none"
+              className="w-full p-4 bg-[#1a2332] text-white rounded-2xl border border-gray-700 focus:border-green-500 outline-none pr-12"
             />
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-5 top-1/2 -translate-y-1/2 text-gray-400 text-sm"
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 text-lg"
             >
-              {showPassword ? "Hide" : "Show"}
+              {showPassword ? <FaEyeSlash /> : <FaEye />}
             </button>
           </div>
 

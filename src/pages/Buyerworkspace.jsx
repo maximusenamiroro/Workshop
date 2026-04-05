@@ -1,8 +1,41 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { FaClock, FaMapMarkerAlt, FaBell } from "react-icons/fa";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
+
+// ===== Reusable Hire Button =====
+const HireButton = ({ onClick, label = "Hire a Worker", className = "" }) => (
+  <button
+    onClick={onClick}
+    className={`w-full bg-green-600 hover:bg-green-700 py-2 rounded-xl text-sm font-semibold transition ${className}`}
+  >
+    {label}
+  </button>
+);
+
+// ===== Status Color Mappings =====
+const ORDER_STATUS_COLOR = {
+  delivered: "text-green-400",
+  arriving: "text-yellow-400",
+  "on the way": "text-blue-400",
+  shipping: "text-gray-400",
+};
+
+const BOOKING_STATUS_COLOR = {
+  accepted: "bg-green-500/20 text-green-400",
+  rejected: "bg-red-500/20 text-red-400",
+  pending: "bg-yellow-500/20 text-yellow-400",
+};
+
+// ===== Format date helper =====
+const formatDate = (dateStr) =>
+  new Date(dateStr).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
 export default function BuyerWorkspace() {
   const { user } = useAuth();
@@ -13,20 +46,22 @@ export default function BuyerWorkspace() {
   const [liveWorkers, setLiveWorkers] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // ===== Fetch all data and subscribe to orders =====
   useEffect(() => {
     if (!user) return;
-    fetchAll();
+
+    const fetchAll = async () => {
+      await Promise.all([fetchOrders(), fetchBookings(), fetchLiveWorkers()]);
+      setLoading(false);
+    };
+
     const unsub = subscribeToOrders();
+    fetchAll();
+
     return () => unsub?.();
   }, [user]);
 
-  // ================= FETCH ALL =================
-  const fetchAll = async () => {
-    await Promise.all([fetchOrders(), fetchBookings(), fetchLiveWorkers()]);
-    setLoading(false);
-  };
-
-  // ================= ORDERS =================
+  // ===== Orders =====
   const fetchOrders = async () => {
     const { data, error } = await supabase
       .from("orders")
@@ -39,7 +74,7 @@ export default function BuyerWorkspace() {
     setOrders(data || []);
   };
 
-  // ================= REAL-TIME ORDERS =================
+  // ===== Real-time subscription =====
   const subscribeToOrders = () => {
     const channel = supabase
       .channel(`orders_changes_${user.id}`)
@@ -66,7 +101,7 @@ export default function BuyerWorkspace() {
     return () => supabase.removeChannel(channel);
   };
 
-  // ================= BOOKINGS =================
+  // ===== Bookings =====
   const fetchBookings = async () => {
     const { data, error } = await supabase
       .from("hire_requests")
@@ -79,7 +114,7 @@ export default function BuyerWorkspace() {
     setBookings(data || []);
   };
 
-  // ================= LIVE WORKERS =================
+  // ===== Live Workers =====
   const fetchLiveWorkers = async () => {
     const { data, error } = await supabase
       .from("live_workers")
@@ -90,33 +125,25 @@ export default function BuyerWorkspace() {
     setLiveWorkers(data || []);
   };
 
-  // ================= HELPERS =================
-  const getStatusColor = (status) => {
-    switch (status?.toLowerCase()) {
-      case "delivered": return "text-green-400";
-      case "arriving": return "text-yellow-400";
-      case "on the way": return "text-blue-400";
-      case "shipping": return "text-gray-400";
-      default: return "text-gray-400";
-    }
-  };
+  // ===== Memoized formatted data for rendering =====
+  const formattedOrders = useMemo(
+    () =>
+      orders.map((o) => ({
+        ...o,
+        color: ORDER_STATUS_COLOR[o.status?.toLowerCase()] || "text-gray-400",
+      })),
+    [orders]
+  );
 
-  const getBookingColor = (status) => {
-    switch (status) {
-      case "accepted": return "bg-green-500/20 text-green-400";
-      case "rejected": return "bg-red-500/20 text-red-400";
-      default: return "bg-yellow-500/20 text-yellow-400";
-    }
-  };
-
-  const formatDate = (dateStr) => {
-    return new Date(dateStr).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
+  const formattedBookings = useMemo(
+    () =>
+      bookings.map((b) => ({
+        ...b,
+        color: BOOKING_STATUS_COLOR[b.status] || BOOKING_STATUS_COLOR.pending,
+        formattedDate: formatDate(b.created_at),
+      })),
+    [bookings]
+  );
 
   if (loading) {
     return (
@@ -128,7 +155,6 @@ export default function BuyerWorkspace() {
 
   return (
     <div className="min-h-screen bg-[#0f0f0f] text-white">
-
       {/* HEADER */}
       <div className="flex justify-between items-center px-5 py-4 border-b border-white/10">
         <h1 className="text-xl font-semibold">Workspace</h1>
@@ -136,16 +162,14 @@ export default function BuyerWorkspace() {
       </div>
 
       <div className="px-4 md:px-8 py-4 space-y-6">
-
         {/* ================= PRODUCT ORDERS ================= */}
         <div className="bg-white/5 border border-white/10 rounded-2xl p-4 md:p-6">
           <h2 className="mb-4 font-semibold">Product Orders</h2>
-
-          {orders.length === 0 ? (
+          {formattedOrders.length === 0 ? (
             <p className="text-gray-500 text-sm">No orders yet.</p>
           ) : (
             <div className="flex gap-4 overflow-x-auto pb-2">
-              {orders.map((order) => (
+              {formattedOrders.map((order) => (
                 <div
                   key={order.id}
                   className="min-w-[110px] flex flex-col items-center"
@@ -156,7 +180,7 @@ export default function BuyerWorkspace() {
                   <p className="text-xs mt-2 text-center">
                     {order.product_name || "Product"}
                   </p>
-                  <p className={`text-xs font-semibold ${getStatusColor(order.status)}`}>
+                  <p className={`text-xs font-semibold ${order.color}`}>
                     {order.status || "pending"}
                   </p>
                 </div>
@@ -172,38 +196,33 @@ export default function BuyerWorkspace() {
             <h3 className="font-semibold">My Bookings</h3>
           </div>
 
-          {bookings.length === 0 ? (
+          {formattedBookings.length === 0 ? (
             <div className="space-y-3">
               <p className="text-gray-500 text-sm">No bookings yet.</p>
-              <button
-                onClick={() => navigate("/hire-worker")}
-                className="w-full bg-green-600 hover:bg-green-700 py-2 rounded-xl text-sm font-semibold transition"
-              >
-                Hire a Worker
-              </button>
+              <HireButton onClick={() => navigate("/hire-worker")} />
             </div>
           ) : (
             <div className="space-y-2">
-              {bookings.map((b) => (
+              {formattedBookings.map((b) => (
                 <div
                   key={b.id}
                   className="flex justify-between items-center py-2 border-b border-white/10"
                 >
                   <div>
                     <p className="text-sm font-medium">Worker Request</p>
-                    <p className="text-xs text-gray-500">{formatDate(b.created_at)}</p>
+                    <p className="text-xs text-gray-500">{b.formattedDate}</p>
                   </div>
-                  <span className={`text-xs px-2 py-1 rounded-full ${getBookingColor(b.status)}`}>
+                  <span
+                    className={`text-xs px-2 py-1 rounded-full ${b.color}`}
+                  >
                     {b.status || "pending"}
                   </span>
                 </div>
               ))}
-              <button
+              <HireButton
                 onClick={() => navigate("/hire-worker")}
-                className="w-full mt-2 bg-green-600 hover:bg-green-700 py-2 rounded-xl text-sm font-semibold transition"
-              >
-                + Hire Another Worker
-              </button>
+                label="+ Hire Another Worker"
+              />
             </div>
           )}
         </div>
@@ -246,7 +265,6 @@ export default function BuyerWorkspace() {
             View All Live Workers
           </button>
         </div>
-
       </div>
     </div>
   );

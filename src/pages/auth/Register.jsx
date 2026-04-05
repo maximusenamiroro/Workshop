@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
+import { FaEye, FaEyeSlash } from "react-icons/fa";
 
 export default function Signup() {
   const navigate = useNavigate();
@@ -12,12 +13,14 @@ export default function Signup() {
     country: "",
     accountType: "client",
     category: "",
+    otherCategory: "",
     password: "",
     location: "",
   });
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [showPassword, setShowPassword] = useState(false); // <- password visibility toggle
 
   const handworkList = ["Carpenter", "Plumber", "Electrician", "Mechanic", "Tailor", "Welder", "Painter", "Bricklayer", "Barber", "Shoemaker", "Technician"];
   const hireList = ["Cleaner", "Driver", "Security", "Assistant", "Delivery Agent", "Office Helper"];
@@ -35,6 +38,18 @@ export default function Signup() {
 
     if (!form.name || !form.email || !form.password) {
       setError("Please fill name, email and password");
+      setLoading(false);
+      return;
+    }
+
+    if (form.accountType === "worker" && !form.category) {
+      setError("Please select a category");
+      setLoading(false);
+      return;
+    }
+
+    if (form.category === "Other" && !form.otherCategory) {
+      setError("Please specify your category");
       setLoading(false);
       return;
     }
@@ -61,10 +76,12 @@ export default function Signup() {
 
         // 3. If Worker, create worker record
         if (form.accountType === "worker") {
+          const workerCategory = form.category === "Other" ? form.otherCategory : form.category;
+
           const { error: workerError } = await supabase.from("workers").insert({
             id: authData.user.id,
-            category: form.category || "General",
-            hand_skill: handworkList.includes(form.category),
+            category: workerCategory || "General",
+            hand_skill: handworkList.includes(workerCategory),
             location: form.location || null,
           });
 
@@ -94,10 +111,11 @@ export default function Signup() {
 
         <form onSubmit={handleSubmit} className="space-y-5">
 
+          {/* Account Type Buttons */}
           <div className="flex gap-3 mb-6">
             <button
               type="button"
-              onClick={() => setForm({ ...form, accountType: "client", category: "" })}
+              onClick={() => setForm({ ...form, accountType: "client", category: "", otherCategory: "" })}
               className={`flex-1 py-4 rounded-2xl font-medium ${form.accountType === "client" ? "bg-green-500" : "bg-gray-800"}`}
             >
               Client
@@ -111,28 +129,62 @@ export default function Signup() {
             </button>
           </div>
 
+          {/* Basic Info */}
           <input type="text" name="name" placeholder="Full Name *" value={form.name} onChange={handleChange} required className="w-full p-4 bg-[#121826] rounded-2xl" />
-
           <input type="email" name="email" placeholder="Email *" value={form.email} onChange={handleChange} required className="w-full p-4 bg-[#121826] rounded-2xl" />
-
           <input type="tel" name="phone" placeholder="Phone Number" value={form.phone} onChange={handleChange} className="w-full p-4 bg-[#121826] rounded-2xl" />
 
+          {/* Country */}
           <select name="country" value={form.country} onChange={handleChange} className="w-full p-4 bg-[#121826] rounded-2xl" required>
             <option value="">Select Country *</option>
             {countries.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
 
+          {/* Worker Category */}
           {form.accountType === "worker" && (
-            <select name="category" value={form.category} onChange={handleChange} className="w-full p-4 bg-[#121826] rounded-2xl" required>
-              <option value="">Select Category *</option>
-              {[...handworkList, ...hireList, ...productList].map(item => (
-                <option key={item} value={item}>{item}</option>
-              ))}
-            </select>
+            <>
+              <select name="category" value={form.category} onChange={handleChange} className="w-full p-4 bg-[#121826] rounded-2xl" required>
+                <option value="">Select Category *</option>
+                {[...handworkList, ...hireList, ...productList, "Other"].map(item => (
+                  <option key={item} value={item}>{item}</option>
+                ))}
+              </select>
+
+              {form.category === "Other" && (
+                <input
+                  type="text"
+                  name="otherCategory"
+                  placeholder="Specify your category"
+                  value={form.otherCategory}
+                  onChange={handleChange}
+                  className="w-full p-4 bg-[#121826] rounded-2xl mt-3"
+                  required
+                />
+              )}
+            </>
           )}
 
-          <input type="password" name="password" placeholder="Password *" value={form.password} onChange={handleChange} required className="w-full p-4 bg-[#121826] rounded-2xl" />
+          {/* Password with hide/show */}
+          <div className="relative">
+            <input
+              type={showPassword ? "text" : "password"}
+              name="password"
+              placeholder="Password *"
+              value={form.password}
+              onChange={handleChange}
+              required
+              className="w-full p-4 bg-[#121826] rounded-2xl pr-12"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute top-1/2 right-4 -translate-y-1/2 text-gray-400"
+            >
+              {showPassword ? <FaEyeSlash /> : <FaEye />}
+            </button>
+          </div>
 
+          {/* Submit */}
           <button 
             type="submit" 
             disabled={loading}
