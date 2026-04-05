@@ -20,7 +20,7 @@ export default function Signup() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [showPassword, setShowPassword] = useState(false); // <- password visibility toggle
+  const [showPassword, setShowPassword] = useState(false);
 
   const handworkList = ["Carpenter", "Plumber", "Electrician", "Mechanic", "Tailor", "Welder", "Painter", "Bricklayer", "Barber", "Shoemaker", "Technician"];
   const hireList = ["Cleaner", "Driver", "Security", "Assistant", "Delivery Agent", "Office Helper"];
@@ -43,13 +43,6 @@ export default function Signup() {
       return;
     }
 
-    // Category is now optional, so this check is removed
-    // if (form.accountType === "worker" && !form.category) {
-    //   setError("Please select a category");
-    //   setLoading(false);
-    //   return;
-    // }
-
     // Only check otherCategory if "Other" is selected
     if (form.category === "Other" && !form.otherCategory) {
       setError("Please specify your category");
@@ -58,7 +51,7 @@ export default function Signup() {
     }
 
     try {
-      // 1. Create user in Supabase Auth
+      // Create user in Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: form.email,
         password: form.password,
@@ -67,7 +60,7 @@ export default function Signup() {
       if (authError) throw authError;
 
       if (authData.user) {
-        // 2. Create profile
+        // Create profile
         const { error: profileError } = await supabase.from("profiles").insert({
           id: authData.user.id,
           full_name: form.name,
@@ -77,14 +70,17 @@ export default function Signup() {
 
         if (profileError) throw profileError;
 
-        // 3. If Worker, create worker record
+        // If Worker, create worker record
         if (form.accountType === "worker") {
           const workerCategory = form.category === "Other" ? form.otherCategory : form.category || null;
+
+          // hand_skill is true if category is in handworkList
+          const handSkillFlag = workerCategory ? handworkList.includes(workerCategory) : false;
 
           const { error: workerError } = await supabase.from("workers").insert({
             id: authData.user.id,
             category: workerCategory || null,
-            hand_skill: handworkList.includes(workerCategory),
+            hand_skill: handSkillFlag,
             location: form.location || null,
           });
 
@@ -143,7 +139,7 @@ export default function Signup() {
             {countries.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
 
-          {/* Worker Category (optional now) */}
+          {/* Worker Category (optional) */}
           {form.accountType === "worker" && (
             <>
               <select name="category" value={form.category} onChange={handleChange} className="w-full p-4 bg-[#121826] rounded-2xl">
