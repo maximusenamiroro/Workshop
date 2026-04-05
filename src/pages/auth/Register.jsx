@@ -36,18 +36,21 @@ export default function Signup() {
     setLoading(true);
     setError("");
 
+    // Required basic fields
     if (!form.name || !form.email || !form.password) {
       setError("Please fill name, email and password");
       setLoading(false);
       return;
     }
 
-    if (form.accountType === "worker" && !form.category) {
-      setError("Please select a category");
-      setLoading(false);
-      return;
-    }
+    // Category is now optional, so this check is removed
+    // if (form.accountType === "worker" && !form.category) {
+    //   setError("Please select a category");
+    //   setLoading(false);
+    //   return;
+    // }
 
+    // Only check otherCategory if "Other" is selected
     if (form.category === "Other" && !form.otherCategory) {
       setError("Please specify your category");
       setLoading(false);
@@ -76,11 +79,11 @@ export default function Signup() {
 
         // 3. If Worker, create worker record
         if (form.accountType === "worker") {
-          const workerCategory = form.category === "Other" ? form.otherCategory : form.category;
+          const workerCategory = form.category === "Other" ? form.otherCategory : form.category || null;
 
           const { error: workerError } = await supabase.from("workers").insert({
             id: authData.user.id,
-            category: workerCategory || "General",
+            category: workerCategory || null,
             hand_skill: handworkList.includes(workerCategory),
             location: form.location || null,
           });
@@ -140,11 +143,11 @@ export default function Signup() {
             {countries.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
 
-          {/* Worker Category */}
+          {/* Worker Category (optional now) */}
           {form.accountType === "worker" && (
             <>
-              <select name="category" value={form.category} onChange={handleChange} className="w-full p-4 bg-[#121826] rounded-2xl" required>
-                <option value="">Select Category *</option>
+              <select name="category" value={form.category} onChange={handleChange} className="w-full p-4 bg-[#121826] rounded-2xl">
+                <option value="">Select Category (Optional)</option>
                 {[...handworkList, ...hireList, ...productList, "Other"].map(item => (
                   <option key={item} value={item}>{item}</option>
                 ))}
