@@ -22,28 +22,58 @@ export default function Signup() {
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
-  const handworkList = ["Carpenter", "Plumber", "Electrician", "Mechanic", "Tailor", "Welder", "Painter", "Bricklayer", "Barber", "Shoemaker", "Technician" "restaurants", "real estate", "e-commerce", "hotel", "event planning", "consulting", "Transportation", "Boutique" "interior Decoratoor", "Tiling & POP Design", "Graphic Designer",];
-  const hireList = ["Cleaner", "Driver", "Security", "Assistant", "Delivery Agent", "Office Helper"];
-  const productList = ["Home Supplies", "Electronics", "Fashion", "Mechanical", "Office Tools"];
-  const countries = ["Nigeria", "Ghana", "Kenya", "South Africa", "United States", "United Kingdom", "Canada", "India", "Germany", "France"];
+  // ==== Expanded Business Groups ====
+  const handworkList = [
+    "Carpenter", "Plumber", "Electrician", "Mechanic", "Tailor",
+    "Welder", "Painter", "Bricklayer", "Barber", "Shoemaker", "Technician",
+    "AC/Fridge Repair", "Laundry Service", "Cleaning Service"
+  ];
 
+  const hireList = [
+    "Cleaner", "Driver", "Security", "Assistant", "Office Helper",
+    "Tutor", "Personal Trainer", "Consultant"
+  ];
+
+  const productList = [
+    "Home Supplies", "Electronics", "Fashion", "Mechanical", "Office Tools",
+    "Furniture Maker", "Soap Manufacturer", "Printing Press", "Packaging Company"
+  ];
+
+  const foodHospitalityList = [
+    "Restaurant", "Hotel", "Catering", "Fast Food", "Lounge",
+    "Bakery", "Bar", "Cafe"
+  ];
+
+  const creativeList = [
+    "Graphic Designer", "Photographer", "Videographer", "Web Developer",
+    "App Developer", "Social Media Manager", "Animator", "Logo Designer"
+  ];
+
+  const retailList = [
+    "Boutique", "Phone Shop", "Electronics Store", "Spare Parts Shop",
+    "Mini Supermarket", "Cosmetic Shop"
+  ];
+
+  const countries = ["Nigeria", "Ghana", "Kenya", "South Africa", "United States",
+    "United Kingdom", "Canada", "India", "Germany", "France"];
+
+  // ==== Handle Input Change ====
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
+  // ==== Handle Signup Submission ====
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError("");
 
-    // Required basic fields
     if (!form.name || !form.email || !form.password) {
       setError("Please fill name, email and password");
       setLoading(false);
       return;
     }
 
-    // Only check otherCategory if "Other" is selected
     if (form.category === "Other" && !form.otherCategory) {
       setError("Please specify your category");
       setLoading(false);
@@ -56,7 +86,6 @@ export default function Signup() {
         email: form.email,
         password: form.password,
       });
-
       if (authError) throw authError;
 
       if (authData.user) {
@@ -67,24 +96,30 @@ export default function Signup() {
           phone: form.phone || null,
           role: form.accountType,
         });
-
         if (profileError) throw profileError;
 
-        // If Worker, create worker record
+        // Worker logic
         if (form.accountType === "worker") {
-          const workerCategory = form.category === "Other" ? form.otherCategory : form.category || null;
+          const workerCategory = form.category === "Other"
+            ? form.otherCategory
+            : form.category || null;
 
-          // hand_skill is true if category is in handworkList
-          const handSkillFlag = workerCategory ? handworkList.includes(workerCategory) : false;
+          const handSkillFlag = workerCategory
+            ? handworkList.includes(workerCategory)
+            : false;
 
+          // Insert into workers table
           const { error: workerError } = await supabase.from("workers").insert({
             id: authData.user.id,
-            category: workerCategory || null,
+            category: workerCategory,       // null if no category
             hand_skill: handSkillFlag,
             location: form.location || null,
           });
 
           if (workerError) console.error("Worker record error:", workerError);
+
+          // Optional: handle placement logic on live / upload
+          // workerCategory ? goes to group : goes to Hire / Others
         }
 
         alert(`✅ Account created successfully as ${form.accountType}!`);
@@ -144,7 +179,7 @@ export default function Signup() {
             <>
               <select name="category" value={form.category} onChange={handleChange} className="w-full p-4 bg-[#121826] rounded-2xl">
                 <option value="">Select Category (Optional)</option>
-                {[...handworkList, ...hireList, ...productList, "Other"].map(item => (
+                {[...handworkList, ...hireList, ...productList, ...foodHospitalityList, ...creativeList, ...retailList, "Other"].map(item => (
                   <option key={item} value={item}>{item}</option>
                 ))}
               </select>
