@@ -22,9 +22,9 @@ export default function Signup() {
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
-  const handworkList = ["Carpenter", "Plumber", "Electrician", "Mechanic", "Tailor", "Welder", "Painter", "Bricklayer", "Barber", "Shoemaker", "Technician"];
+  const handworkList = ["Carpenter", "Plumber", "Electrician", "Mechanic", "Tailor", "Welder", "Painter", "Bricklayer", "Barber", "Shoemaker", "Technician" "restaurants", "real estate", "e-commerce", "hotel", "event planning", "consulting", "Transportation", "Boutique" "interior Decoratoor", "Tiling & POP Design", "Graphic Designer",];
   const hireList = ["Cleaner", "Driver", "Security", "Assistant", "Delivery Agent", "Office Helper"];
-  const productList = ["Home Supplies", "Electronics", "Fashion", "Mechanical", "Food", "Office Tools"];
+  const productList = ["Home Supplies", "Electronics", "Fashion", "Mechanical", "Office Tools"];
   const countries = ["Nigeria", "Ghana", "Kenya", "South Africa", "United States", "United Kingdom", "Canada", "India", "Germany", "France"];
 
   const handleChange = (e) => {
