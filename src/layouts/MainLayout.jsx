@@ -1,7 +1,7 @@
 import React from "react";
 import { Home, User, MessageCircle, Briefcase, LogOut } from "lucide-react";
 import { TbPlanet } from "react-icons/tb";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, Navigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 function NavItem({ icon, label, active, onClick }) {
@@ -25,17 +25,21 @@ export default function MainLayout({ children }) {
   const location = useLocation();
   const { user, role, loading, logout } = useAuth();
 
+  // Always wait for auth to finish loading first
   if (loading) {
     return (
       <div className="h-screen bg-black flex items-center justify-center text-white">
-        Loading...
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+          <p className="text-gray-400 text-sm">Loading...</p>
+        </div>
       </div>
     );
   }
 
+  // Only redirect after loading is complete
   if (!user) {
-    navigate("/login", { replace: true });
-    return null;
+    return <Navigate to="/login" replace />;
   }
 
   const isActive = (path) => location.pathname === path;
@@ -85,7 +89,6 @@ export default function MainLayout({ children }) {
           onClick={() => navigate(profilePath)}
         />
 
-        {/* Logout pinned to bottom */}
         <div className="mt-auto">
           <button
             onClick={handleLogout}

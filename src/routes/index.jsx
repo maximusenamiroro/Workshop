@@ -7,14 +7,12 @@ import MainLayout from "../layouts/MainLayout";
 // Pages
 import Landing from "../pages/Landing";
 import Login from "../pages/auth/Login";
-import Signup from "../pages/auth/Register"; // You named it Register
+import Signup from "../pages/auth/Register";
 import ResetPassword from "../pages/auth/resetpassword";
 import ReelsPage from "../pages/reels/ReelsPage";
 import Workspace from "../pages/Buyerworkspace";
 import Workstation from "../pages/SellerWorkstation";
 import Inbox from "../pages/InboxPage";
-
-// Other pages
 import CreateReel from "../pages/reels/CreateReel";
 import Activity from "../pages/workspace/Activity";
 import Bookings from "../pages/workstation/Bookings";
@@ -30,14 +28,18 @@ import Settings from "../pages/settings/Settings";
 import SellerProfile from "../pages/profile/SellerProfile";
 import BuyerProfile from "../pages/profile/BuyerProfile";
 
-// Protected Route Component
+// ============ PROTECTED ROUTE ============
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { user, role, loading } = useAuth();
 
-  if (loading) {
+  // Wait for auth to fully load including role
+  if (loading || (user && allowedRoles && !role)) {
     return (
       <div className="h-screen bg-black flex items-center justify-center text-white">
-        Loading...
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+          <p className="text-gray-400 text-sm">Loading...</p>
+        </div>
       </div>
     );
   }
@@ -53,23 +55,44 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
   return children;
 };
 
+// ============ PUBLIC ROUTE (redirect if logged in) ============
+const PublicRoute = ({ children }) => {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="h-screen bg-black flex items-center justify-center text-white">
+        <div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (user) {
+    return <Navigate to="/reels" replace />;
+  }
+
+  return children;
+};
+
 export default function AppRoutes() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Public Routes */}
-        <Route path="/" element={<Landing />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
+        {/* Public Routes - redirect to /reels if already logged in */}
+        <Route path="/" element={<PublicRoute><Landing /></PublicRoute>} />
+        <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
+        <Route path="/signup" element={<PublicRoute><Signup /></PublicRoute>} />
         <Route path="/reset-password" element={<ResetPassword />} />
 
-        {/* Reels - Main landing page after login (as you requested) */}
+        {/* Reels - protected but no role restriction */}
         <Route
           path="/reels"
           element={
-            <MainLayout>
-              <ReelsPage />
-            </MainLayout>
+            <ProtectedRoute>
+              <MainLayout>
+                <ReelsPage />
+              </MainLayout>
+            </ProtectedRoute>
           }
         />
 
@@ -85,31 +108,6 @@ export default function AppRoutes() {
           }
         />
 
-        {/* Worker Routes */}
-        <Route
-          path="/workstation"
-          element={
-            <ProtectedRoute allowedRoles={["worker"]}>
-              <MainLayout>
-                <Workstation />
-              </MainLayout>
-            </ProtectedRoute>
-          }
-        />
-
-        {/* Common Routes */}
-        <Route
-          path="/inbox"
-          element={
-            <ProtectedRoute>
-              <MainLayout>
-                <Inbox />
-              </MainLayout>
-            </ProtectedRoute>
-          }
-        />
-
-        {/* Client Specific */}
         <Route
           path="/buyer-profile"
           element={
@@ -132,7 +130,51 @@ export default function AppRoutes() {
           }
         />
 
-        {/* Worker Specific */}
+        <Route
+          path="/hire-worker"
+          element={
+            <ProtectedRoute allowedRoles={["client"]}>
+              <MainLayout>
+                <HireWorker />
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/hire-worker/:id"
+          element={
+            <ProtectedRoute allowedRoles={["client"]}>
+              <MainLayout>
+                <HireWorker />
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/booking-dashboard"
+          element={
+            <ProtectedRoute allowedRoles={["client"]}>
+              <MainLayout>
+                <BookingDashboard />
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Worker Routes */}
+        <Route
+          path="/workstation"
+          element={
+            <ProtectedRoute allowedRoles={["worker"]}>
+              <MainLayout>
+                <Workstation />
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+
         <Route
           path="/seller-profile"
           element={
@@ -189,41 +231,9 @@ export default function AppRoutes() {
         />
 
         <Route
-          path="/booking-dashboard"
-          element={
-            <ProtectedRoute allowedRoles={["worker"]}>
-              <MainLayout>
-                <BookingDashboard />
-              </MainLayout>
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/hire-worker"
-          element={
-            <ProtectedRoute allowedRoles={["client"]}>
-              <MainLayout>
-                <HireWorker />
-              </MainLayout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/hire-worker/:id"
-          element={
-            <ProtectedRoute allowedRoles={["client"]}>
-              <MainLayout>
-                <HireWorker />
-              </MainLayout>
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
           path="/live-services"
           element={
-            <ProtectedRoute allowedRoles={["worker"]}>
+            <ProtectedRoute allowedRoles={["client"]}>
               <MainLayout>
                 <LiveServices />
               </MainLayout>
@@ -234,7 +244,7 @@ export default function AppRoutes() {
         <Route
           path="/tracking"
           element={
-            <ProtectedRoute allowedRoles={["worker"]}>
+            <ProtectedRoute allowedRoles={["client"]}>
               <MainLayout>
                 <Tracking />
               </MainLayout>
@@ -245,7 +255,7 @@ export default function AppRoutes() {
         <Route
           path="/tracking-dashboard"
           element={
-            <ProtectedRoute allowedRoles={["worker"]}>
+            <ProtectedRoute allowedRoles={["client"]}>
               <MainLayout>
                 <TrackingDashboard />
               </MainLayout>
@@ -264,6 +274,18 @@ export default function AppRoutes() {
           }
         />
 
+        {/* Common Routes */}
+        <Route
+          path="/inbox"
+          element={
+            <ProtectedRoute>
+              <MainLayout>
+                <Inbox />
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+
         <Route
           path="/settings"
           element={
@@ -275,7 +297,7 @@ export default function AppRoutes() {
           }
         />
 
-        {/* Fallback Route */}
+        {/* Fallback */}
         <Route path="*" element={<Navigate to="/reels" replace />} />
       </Routes>
     </BrowserRouter>

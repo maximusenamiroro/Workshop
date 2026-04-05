@@ -13,6 +13,7 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [initialized, setInitialized] = useState(false);
 
   const loadProfile = async (userId) => {
     try {
@@ -30,33 +31,54 @@ export const AuthProvider = ({ children }) => {
   };
 
   useEffect(() => {
-    const initAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+    let mounted = true;
+
+    // Step 1 - handle initial session on page load/refresh
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!mounted) return;
       if (session?.user) {
         setUser(session.user);
         await loadProfile(session.user.id);
       }
       setLoading(false);
-    };
-
-    initAuth();
-
-    const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === "SIGNED_OUT") {
-        setUser(null);
-        setRole(null);
-        setLoading(false);
-        return;
-      }
-      if (session?.user) {
-        setUser(session.user);
-        await loadProfile(session.user.id);
-      }
-      setLoading(false);
+      setInitialized(true);
     });
 
-    return () => listener.subscription.unsubscribe();
-  }, []);
+    // Step 2 - handle auth events after initialization
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (!mounted) return;
+
+        // Ignore initial events — getSession handles those
+        if (event === "INITIAL_SESSION") return;
+
+        if (event === "SIGNED_OUT") {
+          setUser(null);
+          setRole(null);
+          setLoading(false);
+          return;
+        }
+
+        // Only handle SIGNED_IN after initialization
+        // This means a real login happened not a page refresh
+        if (event === "SIGNED_IN" && initialized && session?.user) {
+          setUser(session.user);
+          await loadProfile(session.user.id);
+          setLoading(false);
+          return;
+        }
+
+        if (event === "TOKEN_REFRESHED" && session?.user) {
+          setUser(session.user);
+        }
+      }
+    );
+
+    return () => {
+      mounted = false;
+      listener.subscription.unsubscribe();
+    };
+  }, [initialized]);
 
   const logout = async () => {
     try {
@@ -80,7 +102,7 @@ export const AuthProvider = ({ children }) => {
 
   return (
     <AuthContext.Provider value={value}>
-      {!loading && children}
+      {children}
     </AuthContext.Provider>
   );
 };
