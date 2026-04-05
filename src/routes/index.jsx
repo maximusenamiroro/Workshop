@@ -27,12 +27,13 @@ import Sellersetting from "../pages/settings/sellersSetting";
 import Settings from "../pages/settings/Settings";
 import SellerProfile from "../pages/profile/SellerProfile";
 import BuyerProfile from "../pages/profile/BuyerProfile";
+import ProductCatalogue from "../pages/workspace/ProductCatalouge";
+import ProductDetail from "../pages/workspace/ProductDetails";
 
 // ============ PROTECTED ROUTE ============
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { user, role, loading } = useAuth();
 
-  // Wait for auth to fully load including role
   if (loading || (user && allowedRoles && !role)) {
     return (
       <div className="h-screen bg-black flex items-center justify-center text-white">
@@ -55,7 +56,7 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
   return children;
 };
 
-// ============ PUBLIC ROUTE (redirect if logged in) ============
+// ============ PUBLIC ROUTE ============
 const PublicRoute = ({ children }) => {
   const { user, loading } = useAuth();
 
@@ -78,13 +79,13 @@ export default function AppRoutes() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Public Routes - redirect to /reels if already logged in */}
+        {/* Public Routes */}
         <Route path="/" element={<PublicRoute><Landing /></PublicRoute>} />
         <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
         <Route path="/signup" element={<PublicRoute><Signup /></PublicRoute>} />
         <Route path="/reset-password" element={<ResetPassword />} />
 
-        {/* Reels - protected but no role restriction */}
+        {/* Reels */}
         <Route
           path="/reels"
           element={
@@ -158,6 +159,29 @@ export default function AppRoutes() {
             <ProtectedRoute allowedRoles={["client"]}>
               <MainLayout>
                 <BookingDashboard />
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Shop Routes — NEW */}
+        <Route
+          path="/shop"
+          element={
+            <ProtectedRoute allowedRoles={["client"]}>
+              <MainLayout>
+                <ProductCatalogue />
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/product/:id"
+          element={
+            <ProtectedRoute allowedRoles={["client"]}>
+              <MainLayout>
+                <ProductDetail />
               </MainLayout>
             </ProtectedRoute>
           }
