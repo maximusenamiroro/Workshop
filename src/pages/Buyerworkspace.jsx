@@ -65,13 +65,11 @@ export default function BuyerWorkspace() {
   const [now, setNow] = useState(new Date());
   const [storyIndex, setStoryIndex] = useState(null);
 
-  // Timer to update countdown every second
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  // Fetch all data
   useEffect(() => {
     if (!user) return;
     const fetchData = async () => {
@@ -90,7 +88,6 @@ export default function BuyerWorkspace() {
       .order("created_at", { ascending: false });
 
     if (error) console.error("Orders error:", error.message);
-
     setOrders(
       (data || []).map((o) => ({
         ...o,
@@ -114,13 +111,25 @@ export default function BuyerWorkspace() {
 
   // ================= LIVE WORKERS =================
   const fetchLiveWorkers = async () => {
-    const { data, error } = await supabase
-      .from("live_workers")
-      .select("id, service, worker_id, profiles(full_name)")
-      .limit(50);
+    try {
+      const { data, error } = await supabase
+        .from("live_workers")
+        .select("id, service, worker_id, profiles(full_name)")
+        .limit(50);
 
-    if (error) console.error("Live workers error:", error.message);
-    setLiveWorkers(data || []);
+      if (error) throw error;
+      console.log("Live workers:", data);
+      setLiveWorkers(data || []);
+    } catch (err) {
+      console.error("Live workers error:", err.message);
+      // Fallback without join
+      const { data: fallback } = await supabase
+        .from("live_workers")
+        .select("id, service, worker_id")
+        .limit(50);
+      console.log("Live workers fallback:", fallback);
+      setLiveWorkers(fallback || []);
+    }
   };
 
   // ================= FORMATTED ORDERS =================
@@ -138,7 +147,6 @@ export default function BuyerWorkspace() {
     [orders, now]
   );
 
-  // ================= STORY MODAL =================
   const workersForCurrentStory =
     storyIndex !== null
       ? liveWorkers.filter(
@@ -156,7 +164,6 @@ export default function BuyerWorkspace() {
     trackMouse: true,
   });
 
-  // ================= HELPERS =================
   const getBookingColor = (status) => {
     switch (status) {
       case "accepted": return "bg-green-500/20 text-green-400";
@@ -192,16 +199,36 @@ export default function BuyerWorkspace() {
         />
         <h1 className="text-xl font-semibold">Workspace</h1>
         <div className="flex gap-4 items-center">
-          <FaSearch className="text-white/70 cursor-pointer" />
+          <FaSearch
+            className="text-white/70 cursor-pointer"
+            onClick={() => navigate("/shop")}
+          />
           <FaBell className="text-white/70" />
         </div>
       </div>
 
       {/* ================= PRODUCT ORDERS ================= */}
       <div className="mb-6">
-        <h2 className="mb-3 font-semibold">Product Orders</h2>
+        <div className="flex justify-between items-center mb-3">
+          <h2 className="font-semibold">Product Orders</h2>
+          <button
+            onClick={() => navigate("/shop")}
+            className="text-xs text-green-400 hover:text-green-300"
+          >
+            Shop →
+          </button>
+        </div>
+
         {formattedOrders.length === 0 ? (
-          <p className="text-gray-500 text-sm">No orders yet.</p>
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-4 text-center">
+            <p className="text-gray-500 text-sm mb-3">No orders yet.</p>
+            <button
+              onClick={() => navigate("/shop")}
+              className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-xl text-sm font-semibold transition"
+            >
+              Browse Products
+            </button>
+          </div>
         ) : (
           <div className="flex gap-4 overflow-x-auto pb-2">
             {formattedOrders.map((order, idx) => (
@@ -285,8 +312,11 @@ export default function BuyerWorkspace() {
                 className="flex justify-between items-center py-2 border-b border-white/10"
               >
                 <div>
-                  <p className="text-sm font-medium">{w.profiles?.full_name || "Worker"}</p>
+                  <p className="text-sm font-medium">
+                    {w.profiles?.full_name || "Worker"}
+                  </p>
                   <p className="text-xs text-gray-500">{w.service}</p>
+                  <p className="text-xs text-green-400">🟢 Live now</p>
                 </div>
                 <button
                   onClick={() => navigate(`/hire-worker/${w.worker_id}`)}
@@ -327,7 +357,9 @@ export default function BuyerWorkspace() {
             {formattedOrders.map((_, idx) => (
               <div
                 key={idx}
-                className={`h-1 flex-1 rounded-full ${idx === storyIndex ? "bg-white" : "bg-white/30"}`}
+                className={`h-1 flex-1 rounded-full ${
+                  idx === storyIndex ? "bg-white" : "bg-white/30"
+                }`}
               />
             ))}
           </div>
@@ -357,7 +389,9 @@ export default function BuyerWorkspace() {
                       {w.profiles?.full_name?.[0] || "W"}
                     </div>
                     <div>
-                      <p className="text-white/90 font-medium">{w.profiles?.full_name || "Worker"}</p>
+                      <p className="text-white/90 font-medium">
+                        {w.profiles?.full_name || "Worker"}
+                      </p>
                       <p className="text-xs text-green-400">{w.service}</p>
                     </div>
                   </div>
