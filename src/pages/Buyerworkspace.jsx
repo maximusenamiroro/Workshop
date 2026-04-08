@@ -17,7 +17,7 @@ const formatCountdown = (ms) => {
   const hrs = Math.floor(ms / 1000 / 60 / 60);
   const mins = Math.floor((ms / 1000 / 60) % 60);
   const secs = Math.floor((ms / 1000) % 60);
-  return `${hrs}h ${mins.toString().padStart(2, "0")}m ${secs.toString().padStart(2, "0")}s`;
+  return `${hrs}h ${mins}m ${secs}s`;
 };
 
 const CircularProgress = ({ progress }) => {
@@ -64,25 +64,18 @@ export default function BuyerWorkspace() {
     if (!user) return;
     fetchAll();
 
-    // ===== Real-time subscriptions =====
     const ordersChannel = supabase
-      .channel("orders_realtime")
+      .channel(`orders_${user.id}`)
       .on("postgres_changes", {
-        event: "INSERT",
+        event: "*",
         schema: "public",
         table: "orders",
         filter: `user_id=eq.${user.id}`,
-      }, (payload) => {
-        const newOrder = {
-          ...payload.new,
-          expiresAt: new Date(new Date(payload.new.created_at).getTime() + 24 * 60 * 60 * 1000),
-        };
-        setOrders((prev) => [newOrder, ...prev]);
-      })
+      }, () => fetchOrders())
       .subscribe();
 
     const liveChannel = supabase
-      .channel("live_workers_realtime")
+      .channel(`live_workers_${user.id}`)
       .on("postgres_changes", {
         event: "*",
         schema: "public",
@@ -90,20 +83,9 @@ export default function BuyerWorkspace() {
       }, () => fetchLiveWorkers())
       .subscribe();
 
-    const bookingsChannel = supabase
-      .channel("bookings_realtime")
-      .on("postgres_changes", {
-        event: "*",
-        schema: "public",
-        table: "hire_requests",
-        filter: `client_id=eq.${user.id}`,
-      }, () => fetchBookings())
-      .subscribe();
-
     return () => {
       supabase.removeChannel(ordersChannel);
       supabase.removeChannel(liveChannel);
-      supabase.removeChannel(bookingsChannel);
     };
   }, [user]);
 
@@ -112,10 +94,11 @@ export default function BuyerWorkspace() {
     setLoading(false);
   };
 
+  // ================= ORDERS =================
   const fetchOrders = async () => {
     const { data, error } = await supabase
       .from("orders")
-      .select("id, product_name, status, created_at, product_image")
+      .select("id, product_name, status, created_at, product_image_url")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false });
 
@@ -126,6 +109,7 @@ export default function BuyerWorkspace() {
     })));
   };
 
+  // ================= BOOKINGS =================
   const fetchBookings = async () => {
     const { data, error } = await supabase
       .from("hire_requests")
@@ -138,6 +122,7 @@ export default function BuyerWorkspace() {
     setBookings(data || []);
   };
 
+  // ================= LIVE WORKERS =================
   const fetchLiveWorkers = async () => {
     try {
       const { data, error } = await supabase
@@ -157,28 +142,25 @@ export default function BuyerWorkspace() {
     }
   };
 
-  const formattedOrders = useMemo(() =>
-    orders.map(o => {
-      const remaining = o.expiresAt - now;
-      return {
-        ...o,
-        color: ORDER_STATUS_COLOR[o.status?.toLowerCase()] || "text-gray-400",
-        countdown: remaining > 0 ? remaining : 0,
-        progress: remaining > 0 ? (remaining / (24 * 60 * 60 * 1000)) * 100 : 0,
-      };
-    }), [orders, now]);
+  // ================= FORMATTED ORDERS =================
+  const formattedOrders = useMemo(() => orders.map(o => {
+    const remaining = o.expiresAt - now;
+    return {
+      ...o,
+      color: ORDER_STATUS_COLOR[o.status?.toLowerCase()] || "text-gray-400",
+      countdown: remaining > 0 ? remaining : 0,
+      progress: remaining > 0 ? (remaining / (24 * 60 * 60 * 1000)) * 100 : 0,
+    };
+  }), [orders, now]);
 
-  // ===== Map live workers to the current order story =====
-  const workersForCurrentStory = storyIndex !== null
-    ? liveWorkers.filter(w => w.service?.toLowerCase() === formattedOrders[storyIndex]?.product_name?.toLowerCase())
-    : [];
+  const workersForCurrentStory = storyIndex !== null ? liveWorkers : [];
 
   const handlers = useSwipeable({
     onSwipedLeft: () => {
-      if (storyIndex !== null && storyIndex < formattedOrders.length - 1) setStoryIndex(storyIndex + 1);
+      if (storyIndex < formattedOrders.length - 1) setStoryIndex(storyIndex + 1);
     },
     onSwipedRight: () => {
-      if (storyIndex !== null && storyIndex > 0) setStoryIndex(storyIndex - 1);
+      if (storyIndex > 0) setStoryIndex(storyIndex - 1);
     },
     trackMouse: true,
   });
@@ -203,6 +185,7 @@ export default function BuyerWorkspace() {
 
   return (
     <div className="min-h-screen bg-[#0f0f0f] text-white p-4 pb-24">
+
       {/* HEADER */}
       <div className="flex justify-between items-center mb-6">
         <FaClipboardList className="text-white/70 cursor-pointer" size={22} onClick={() => navigate("/productorder")} />
@@ -232,9 +215,9 @@ export default function BuyerWorkspace() {
               <div key={order.id} className="flex flex-col items-center cursor-pointer min-w-[80px]" onClick={() => setStoryIndex(idx)}>
                 <div className="relative w-16 h-16">
                   <CircularProgress progress={order.progress} />
-                  <div className="absolute top-0 left-0 w-full h-full rounded-full overflow-hidden flex items-center justify-center">
-                    {order.product_image ? (
-                      <img src={order.product_image} alt={order.product_name} className="w-10 h-10 object-cover rounded-full" />
+                  <div className="absolute top-0 left-0 w-full h-full rounded-full overflow-hidden flex items-center justify-center bg-white/5">
+                    {order.product_image_url ? (
+                      <img src={order.product_image_url} alt={order.product_name} className="w-full h-full object-cover rounded-full" />
                     ) : (
                       <span className="text-2xl">📦</span>
                     )}
@@ -317,7 +300,7 @@ export default function BuyerWorkspace() {
       </div>
 
       {/* ================= STORY MODAL ================= */}
-      {storyIndex !== null && storyIndex < formattedOrders.length && (
+      {storyIndex !== null && (
         <div {...handlers} className="fixed inset-0 bg-black/95 z-50 flex flex-col">
           <div className="flex justify-between items-center p-4">
             <FaTimes className="text-white cursor-pointer" size={22} onClick={() => setStoryIndex(null)} />
@@ -325,6 +308,7 @@ export default function BuyerWorkspace() {
             <div className="w-6" />
           </div>
 
+          {/* Progress bars */}
           <div className="flex gap-1 px-4">
             {formattedOrders.map((_, idx) => (
               <div key={idx} className={`h-1 flex-1 rounded-full ${idx === storyIndex ? "bg-white" : "bg-white/30"}`} />
@@ -332,32 +316,41 @@ export default function BuyerWorkspace() {
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 space-y-3 mt-4">
-            <div className="bg-white/5 rounded-2xl p-4 mb-4 flex flex-col items-center">
-              {formattedOrders[storyIndex]?.product_image ? (
-                <img src={formattedOrders[storyIndex].product_image} alt={formattedOrders[storyIndex].product_name} className="w-24 h-24 object-cover rounded-xl mb-2" />
-              ) : (
-                <span className="text-4xl mb-2">📦</span>
-              )}
-              <p className={`text-lg font-bold ${formattedOrders[storyIndex]?.color}`}>
-                {formattedOrders[storyIndex]?.status || "pending"}
-              </p>
-              <p className="text-gray-400 text-sm mt-1">
-                Expires in: {formatCountdown(formattedOrders[storyIndex]?.countdown)}
-              </p>
+            {/* Order status */}
+            <div className="bg-white/5 rounded-2xl p-4">
+              <div className="flex items-center gap-4">
+                <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center overflow-hidden">
+                  {formattedOrders[storyIndex]?.product_image_url ? (
+                    <img src={formattedOrders[storyIndex].product_image_url} className="w-full h-full object-cover" alt="product" />
+                  ) : (
+                    <span className="text-3xl">📦</span>
+                  )}
+                </div>
+                <div>
+                  <p className="font-semibold text-white">{formattedOrders[storyIndex]?.product_name}</p>
+                  <p className={`text-lg font-bold ${formattedOrders[storyIndex]?.color}`}>
+                    {formattedOrders[storyIndex]?.status || "pending"}
+                  </p>
+                  <p className="text-gray-400 text-sm mt-1">
+                    Expires in: {formatCountdown(formattedOrders[storyIndex]?.countdown)}
+                  </p>
+                </div>
+              </div>
             </div>
 
-            <h3 className="font-semibold text-white/70 text-sm">Related Live Workers</h3>
+            {/* Live workers */}
+            <h3 className="font-semibold text-white/70 text-sm">Live Workers Available</h3>
             {workersForCurrentStory.length === 0 ? (
-              <p className="text-gray-400 text-sm">No live workers for this product.</p>
+              <p className="text-gray-400 text-sm">No live workers right now.</p>
             ) : (
               workersForCurrentStory.map((w) => (
-                <div key={w.id} className="flex items-center justify-between gap-4 bg-white/5 rounded-xl p-3">
+                <div key={w.id} className="flex items-center justify-between bg-white/5 rounded-xl p-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-full bg-green-600 flex items-center justify-center font-bold text-lg">
+                    <div className="w-10 h-10 rounded-full bg-green-600 flex items-center justify-center font-bold">
                       {w.profiles?.full_name?.[0] || "W"}
                     </div>
                     <div>
-                      <p className="text-white/90 font-medium">{w.profiles?.full_name || "Worker"}</p>
+                      <p className="text-white/90 font-medium text-sm">{w.profiles?.full_name || "Worker"}</p>
                       <p className="text-xs text-green-400">{w.service}</p>
                     </div>
                   </div>

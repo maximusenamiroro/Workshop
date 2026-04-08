@@ -23,36 +23,54 @@ export default function HireWorker() {
   const [liveWorkers, setLiveWorkers] = useState([]);
 
   const fetchWorkers = async () => {
-    try {
-      setLoading(true);
+  try {
+    setLoading(true);
 
-      if (id) {
-        // Fetch specific worker
-        const { data, error: fetchError } = await supabase
-          .from("workers")
-          .select("id, category, location, profiles(full_name)")
-          .eq("id", id)
-          .single();
+    if (id) {
+      // Try workers table first
+      const { data: workerData } = await supabase
+        .from("workers")
+        .select("id, category, location, profiles(full_name)")
+        .eq("id", id)
+        .maybeSingle(); // Use maybeSingle instead of single
 
-        if (fetchError) throw fetchError;
-        setWorker(data);
+      if (workerData) {
+        setWorker(workerData);
       } else {
-        // Fetch all live workers
-        const { data, error: fetchError } = await supabase
+        // Fallback - get from live_workers
+        const { data: liveData } = await supabase
           .from("live_workers")
           .select("id, service, worker_id, profiles(full_name)")
-          .limit(20);
+          .eq("worker_id", id)
+          .maybeSingle();
 
-        if (fetchError) throw fetchError;
-        setLiveWorkers(data || []);
+        if (liveData) {
+          setWorker({
+            id: liveData.worker_id,
+            category: liveData.service,
+            profiles: liveData.profiles,
+          });
+        } else {
+          setError("Worker not found");
+        }
       }
-    } catch (err) {
-      console.error(err);
-      setError("Failed to load workers");
-    } finally {
-      setLoading(false);
+    } else {
+      // Fetch all live workers
+      const { data, error: fetchError } = await supabase
+        .from("live_workers")
+        .select("id, service, worker_id, profiles(full_name)")
+        .limit(20);
+
+      if (fetchError) throw fetchError;
+      setLiveWorkers(data || []);
     }
-  };
+  } catch (err) {
+    console.error(err);
+    setError("Failed to load workers");
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleHire = async () => {
     if (!job.trim() || !location.trim()) {
