@@ -64,7 +64,7 @@ export default function BuyerWorkspace() {
     if (!user) return;
     fetchAll();
 
-    // ===== Real-time subscriptions (new syntax) =====
+    // ===== Real-time subscriptions =====
     const ordersChannel = supabase
       .channel("orders_realtime")
       .on("postgres_changes", {
@@ -90,9 +90,20 @@ export default function BuyerWorkspace() {
       }, () => fetchLiveWorkers())
       .subscribe();
 
+    const bookingsChannel = supabase
+      .channel("bookings_realtime")
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "hire_requests",
+        filter: `client_id=eq.${user.id}`,
+      }, () => fetchBookings())
+      .subscribe();
+
     return () => {
       supabase.removeChannel(ordersChannel);
       supabase.removeChannel(liveChannel);
+      supabase.removeChannel(bookingsChannel);
     };
   }, [user]);
 
@@ -104,7 +115,7 @@ export default function BuyerWorkspace() {
   const fetchOrders = async () => {
     const { data, error } = await supabase
       .from("orders")
-      .select("id, product_name, status, created_at")
+      .select("id, product_name, status, created_at, product_image")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false });
 
@@ -157,16 +168,17 @@ export default function BuyerWorkspace() {
       };
     }), [orders, now]);
 
+  // ===== Map live workers to the current order story =====
   const workersForCurrentStory = storyIndex !== null
-    ? liveWorkers.filter(w => w.service === formattedOrders[storyIndex]?.product_name)
+    ? liveWorkers.filter(w => w.service?.toLowerCase() === formattedOrders[storyIndex]?.product_name?.toLowerCase())
     : [];
 
   const handlers = useSwipeable({
     onSwipedLeft: () => {
-      if (storyIndex < formattedOrders.length - 1) setStoryIndex(storyIndex + 1);
+      if (storyIndex !== null && storyIndex < formattedOrders.length - 1) setStoryIndex(storyIndex + 1);
     },
     onSwipedRight: () => {
-      if (storyIndex > 0) setStoryIndex(storyIndex - 1);
+      if (storyIndex !== null && storyIndex > 0) setStoryIndex(storyIndex - 1);
     },
     trackMouse: true,
   });
@@ -191,7 +203,6 @@ export default function BuyerWorkspace() {
 
   return (
     <div className="min-h-screen bg-[#0f0f0f] text-white p-4 pb-24">
-
       {/* HEADER */}
       <div className="flex justify-between items-center mb-6">
         <FaClipboardList className="text-white/70 cursor-pointer" size={22} onClick={() => navigate("/productorder")} />
@@ -222,7 +233,11 @@ export default function BuyerWorkspace() {
                 <div className="relative w-16 h-16">
                   <CircularProgress progress={order.progress} />
                   <div className="absolute top-0 left-0 w-full h-full rounded-full overflow-hidden flex items-center justify-center">
-                    <span className="text-2xl">📦</span>
+                    {order.product_image ? (
+                      <img src={order.product_image} alt={order.product_name} className="w-10 h-10 object-cover rounded-full" />
+                    ) : (
+                      <span className="text-2xl">📦</span>
+                    )}
                   </div>
                 </div>
                 <p className="text-xs mt-2 text-center truncate w-20">{order.product_name}</p>
@@ -302,7 +317,7 @@ export default function BuyerWorkspace() {
       </div>
 
       {/* ================= STORY MODAL ================= */}
-      {storyIndex !== null && (
+      {storyIndex !== null && storyIndex < formattedOrders.length && (
         <div {...handlers} className="fixed inset-0 bg-black/95 z-50 flex flex-col">
           <div className="flex justify-between items-center p-4">
             <FaTimes className="text-white cursor-pointer" size={22} onClick={() => setStoryIndex(null)} />
@@ -317,7 +332,12 @@ export default function BuyerWorkspace() {
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 space-y-3 mt-4">
-            <div className="bg-white/5 rounded-2xl p-4 mb-4">
+            <div className="bg-white/5 rounded-2xl p-4 mb-4 flex flex-col items-center">
+              {formattedOrders[storyIndex]?.product_image ? (
+                <img src={formattedOrders[storyIndex].product_image} alt={formattedOrders[storyIndex].product_name} className="w-24 h-24 object-cover rounded-xl mb-2" />
+              ) : (
+                <span className="text-4xl mb-2">📦</span>
+              )}
               <p className={`text-lg font-bold ${formattedOrders[storyIndex]?.color}`}>
                 {formattedOrders[storyIndex]?.status || "pending"}
               </p>
