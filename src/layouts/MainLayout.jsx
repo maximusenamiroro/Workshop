@@ -23,7 +23,7 @@ function NavItem({ icon, label, active, onClick }) {
 export default function MainLayout({ children }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, role, loading, logout } = useAuth();
+  const { user, role, loading } = useAuth();
 
   // Always wait for auth to finish loading first
   if (loading) {
@@ -49,15 +49,7 @@ export default function MainLayout({ children }) {
   const workspaceIcon = isWorker ? <Briefcase size={28} /> : <TbPlanet size={28} />;
   const profilePath = isWorker ? "/seller-profile" : "/buyer-profile";
 
-  const handleLogout = async () => {
-    try {
-      await logout();
-    } catch (err) {
-      console.error("Logout error:", err);
-    } finally {
-      navigate("/login", { replace: true });
-    }
-  };
+ 
 
   return (
     <div className="flex flex-col md:flex-row h-screen w-full bg-black text-white">
@@ -89,15 +81,7 @@ export default function MainLayout({ children }) {
           onClick={() => navigate(profilePath)}
         />
 
-        <div className="mt-auto">
-          <button
-            onClick={handleLogout}
-            className="flex flex-col items-center text-red-400 hover:text-red-300 px-3 py-2 transition"
-          >
-            <LogOut size={28} />
-            <span className="text-xs mt-1">Logout</span>
-          </button>
-        </div>
+       
       </div>
 
       {/* ===== MAIN CONTENT ===== */}
@@ -132,13 +116,6 @@ export default function MainLayout({ children }) {
             active={isActive(profilePath)}
             onClick={() => navigate(profilePath)}
           />
-          <button
-            onClick={handleLogout}
-            className="flex flex-col items-center text-red-400 hover:text-red-300 px-3 py-2 transition"
-          >
-            <LogOut size={24} />
-            <span className="text-xs mt-1">Logout</span>
-          </button>
         </div>
       </div>
     </div>
