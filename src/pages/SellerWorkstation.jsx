@@ -1,434 +1,290 @@
 import { useState, useEffect } from "react";
-import { FaClock, FaBell, FaSearch, FaClipboardList, FaToggleOn, FaToggleOff, FaTrash, FaPlus } from "react-icons/fa";
+import {
+  FaBell,
+  FaToggleOn,
+  FaToggleOff,
+  FaTrash,
+  FaPlus,
+  FaSearch,
+  FaMapMarkerAlt,
+  FaComment,
+} from "react-icons/fa";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
-import { useNavigate } from "react-router-dom";
-
-const CATEGORIES = [
-  "Fashion", "Shoes", "Watches", "Electronics", "Home Appliances",
-  "Food & Drinks", "Beauty", "Tools", "Furniture", "Sports",
-  "Books", "Toys", "Health", "Others"
-];
-
-const SERVICES = [
-  "Cleaning", "Driving", "Plumbing", "Electrical", "Carpentry",
-  "Security", "Delivery", "Tailoring", "Painting", "Welding", "Others"
-];
-
-const BOOKING_STATUS_COLOR = {
-  accepted: "bg-green-500/20 text-green-400",
-  rejected: "bg-red-500/20 text-red-400",
-  pending: "bg-yellow-500/20 text-yellow-400",
-};
-
-const formatDate = (dateStr) =>
-  new Date(dateStr).toLocaleDateString("en-US", {
-    month: "short", day: "numeric",
-    hour: "2-digit", minute: "2-digit",
-  });
-
-const getCountdown = (createdAt, now) => {
-  const expireAt = new Date(createdAt).getTime() + 24 * 60 * 60 * 1000;
-  const remaining = Math.max(0, expireAt - now);
-  const hours = Math.floor(remaining / 3600000);
-  const minutes = Math.floor((remaining % 3600000) / 60000);
-  const seconds = Math.floor((remaining % 60000) / 1000);
-  return `${hours}h ${minutes.toString().padStart(2, "0")}m ${seconds.toString().padStart(2, "0")}s`;
-};
 
 export default function SellerWorkstation() {
   const { user } = useAuth();
-  const navigate = useNavigate();
 
   const [products, setProducts] = useState([]);
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
+
   const [isLive, setIsLive] = useState(false);
   const [service, setService] = useState("");
   const [liveLoading, setLiveLoading] = useState(false);
+
+  const [workerCategory, setWorkerCategory] = useState(null);
+
   const [showUpload, setShowUpload] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [now, setNow] = useState(Date.now());
+  const [search, setSearch] = useState("");
+
+  const [feedTab, setFeedTab] = useState("products");
+
+  const [chatUser, setChatUser] = useState(null);
+  const [message, setMessage] = useState("");
+  const [messages, setMessages] = useState([]);
 
   const [form, setForm] = useState({
     title: "",
     description: "",
     price: "",
-    category: "",
     file: null,
   });
 
-  // ========== INITIAL LOAD ==========
+  // ================= INIT =================
   useEffect(() => {
     if (!user) return;
     fetchAll();
 
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, [user]);
-
-  // ========== REAL-TIME BOOKINGS ==========
-  useEffect(() => {
-    if (!user) return;
-
-    const bookingsChannel = supabase
-      .channel(`hire_requests_${user.id}`)
-      .on("postgres_changes", {
-        event: "*",
-        schema: "public",
-        table: "hire_requests",
-        filter: `worker_id=eq.${user.id}`,
-      }, () => fetchBookings())
+    // 🔔 REAL-TIME BOOKINGS
+    const channel = supabase
+      .channel("hire_requests_realtime")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "hire_requests" },
+        (payload) => {
+          if (payload.new.worker_id === user.id) {
+            setBookings((prev) => [payload.new, ...prev]);
+            alert("🔔 New Booking Request!");
+          }
+        }
+      )
       .subscribe();
 
-    return () => supabase.removeChannel(bookingsChannel);
+    return () => supabase.removeChannel(channel);
   }, [user]);
 
-  // ========== FETCH ALL ==========
   const fetchAll = async () => {
-    await Promise.all([fetchProducts(), fetchBookings(), fetchLiveStatus()]);
+    await Promise.all([
+      fetchProducts(),
+      fetchBookings(),
+      fetchWorkerCategory(),
+    ]);
     setLoading(false);
   };
 
-  // ========== LIVE STATUS ==========
-  const fetchLiveStatus = async () => {
-    try {
-      const { data } = await supabase
-        .from("live_workers")
-        .select("id, service")
-        .eq("worker_id", user.id)
-        .single();
-      if (data) {
-        setIsLive(true);
-        setService(data.service || "");
-      } else {
-        setIsLive(false);
-      }
-    } catch (err) {
-      setIsLive(false);
-    }
-  };
-
-  const toggleLive = async () => {
-    setLiveLoading(true);
-    try {
-      if (isLive) {
-        await supabase.from("live_workers").delete().eq("worker_id", user.id);
-        setIsLive(false);
-      } else {
-        if (!service) {
-          alert("Please select a service first");
-          return;
-        }
-        const { error } = await supabase.from("live_workers").upsert({
-          worker_id: user.id,
-          service,
-          updated_at: new Date().toISOString(),
-        });
-        if (error) throw error;
-        setIsLive(true);
-      }
-    } catch (err) {
-      console.error("Live toggle error:", err.message);
-      alert("Failed to update live status: " + err.message);
-    } finally {
-      setLiveLoading(false);
-    }
-  };
-
-  // ========== PRODUCTS ==========
-  const fetchProducts = async () => {
-    const { data, error } = await supabase
-      .from("products")
-      .select("id, title, category, price, image_url, created_at")
+  // ================= CATEGORY =================
+  const fetchWorkerCategory = async () => {
+    const { data } = await supabase
+      .from("workers")
+      .select("category")
       .eq("worker_id", user.id)
+      .maybeSingle();
+
+    setWorkerCategory(data?.category || null);
+  };
+
+  // ================= PRODUCTS =================
+  const fetchProducts = async () => {
+    const { data } = await supabase
+      .from("products")
+      .select("*")
       .order("created_at", { ascending: false });
 
-    if (error) console.error("Fetch products error:", error.message);
     setProducts(data || []);
   };
 
-  const uploadProduct = async () => {
-    if (!form.title || !form.price || !form.category) {
-      return alert("Please fill title, price and category");
-    }
-    setUploading(true);
-    try {
-      let imageUrl = null;
-      if (form.file) {
-        const fileExt = form.file.name.split(".").pop();
-        const fileName = `${user.id}_${Date.now()}.${fileExt}`;
-        const { error: uploadError } = await supabase.storage
-          .from("products")
-          .upload(fileName, form.file);
-        if (uploadError) throw uploadError;
-        const { data: urlData } = supabase.storage
-          .from("products")
-          .getPublicUrl(fileName);
-        imageUrl = urlData.publicUrl;
-      }
-
-      const { error } = await supabase.from("products").insert({
-        worker_id: user.id,
-        title: form.title,
-        description: form.description,
-        price: parseFloat(form.price),
-        category: form.category,
-        image_url: imageUrl,
-      });
-      if (error) throw error;
-
-      setForm({ title: "", description: "", price: "", category: "", file: null });
-      setShowUpload(false);
-      fetchProducts();
-      alert("✅ Product uploaded successfully!");
-    } catch (err) {
-      console.error("Upload error:", err.message);
-      alert("Upload failed: " + err.message);
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const deleteProduct = async (product) => {
-    try {
-      await supabase.from("products").delete().eq("id", product.id);
-      if (product.image_url) {
-        const fileName = product.image_url.split("/").pop();
-        await supabase.storage.from("products").remove([fileName]);
-      }
-      fetchProducts();
-    } catch (err) {
-      console.error("Delete error:", err.message);
-    }
-  };
-
-  // ========== BOOKINGS ==========
   const fetchBookings = async () => {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("hire_requests")
-      .select(`
-        id, status, created_at, job_description, location,
-        profiles!hire_requests_client_id_fkey(full_name)
-      `)
+      .select("*")
       .eq("worker_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(5);
+      .limit(10);
 
-    if (error) {
-      // Fallback without join if foreign key name differs
-      const { data: fallback } = await supabase
-        .from("hire_requests")
-        .select("id, status, created_at, job_description, location, client_id")
-        .eq("worker_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(5);
-      setBookings(fallback || []);
-      return;
-    }
     setBookings(data || []);
   };
 
-  const updateBookingStatus = async (id, status) => {
-    const { error } = await supabase
-      .from("hire_requests")
-      .update({ status })
-      .eq("id", id);
-    if (error) console.error("Update booking error:", error.message);
-    else fetchBookings();
+  // ================= LIVE MAP DATA (optional fields lat/lng) =================
+  const [workers, setWorkers] = useState([]);
+
+  useEffect(() => {
+    const loadWorkers = async () => {
+      const { data } = await supabase
+        .from("workers")
+        .select("worker_id, category, lat, lng, status");
+
+      setWorkers(data || []);
+    };
+
+    loadWorkers();
+  }, []);
+
+  // ================= LIVE STATUS =================
+  const toggleLive = async () => {
+    setLiveLoading(true);
+
+    const finalService =
+      service?.trim() || workerCategory || "General Worker";
+
+    if (isLive) {
+      await supabase
+        .from("live_workers")
+        .delete()
+        .eq("worker_id", user.id);
+
+      setIsLive(false);
+    } else {
+      await supabase.from("live_workers").upsert({
+        worker_id: user.id,
+        service: finalService,
+      });
+
+      setIsLive(true);
+    }
+
+    setLiveLoading(false);
   };
 
-  if (loading) return (
-    <div className="min-h-screen bg-[#0f0f0f] flex items-center justify-center text-white">
-      <div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
-    </div>
-  );
+  // ================= CHAT =================
+  const openChat = async (otherUserId) => {
+    setChatUser(otherUserId);
+
+    const { data } = await supabase
+      .from("messages")
+      .select("*")
+      .or(
+        `sender_id.eq.${user.id},receiver_id.eq.${user.id}`
+      )
+      .limit(20);
+
+    setMessages(data || []);
+  };
+
+  const sendMessage = async () => {
+    if (!message) return;
+
+    await supabase.from("messages").insert({
+      sender_id: user.id,
+      receiver_id: chatUser,
+      content: message,
+    });
+
+    setMessage("");
+  };
+
+  // ================= FILTERED PRODUCTS =================
+  const filteredProducts = products.filter((p) => {
+    return (
+      p.title?.toLowerCase().includes(search.toLowerCase()) ||
+      p.category?.toLowerCase().includes(search.toLowerCase())
+    );
+  });
+
+  if (loading) return <div className="text-white p-6">Loading...</div>;
 
   return (
-    <div className="min-h-screen bg-[#1A1A1A] text-white p-4 md:p-6 space-y-6 pb-24">
+    <div className="min-h-screen bg-[#1A1A1A] text-white p-4 space-y-5">
 
       {/* HEADER */}
       <div className="flex justify-between items-center">
-        <h1 className="text-xl font-semibold">Workstation</h1>
-        <div className="flex items-center gap-4">
-          <FaSearch className="text-gray-400 cursor-pointer" />
-          <FaBell className="text-gray-400" />
-        </div>
+        <FaMapMarkerAlt />
+        <h1 className="text-xl">Workstation Pro</h1>
+        <FaBell />
       </div>
 
-      {/* ========== GO LIVE ========== */}
-      <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
-        <h2 className="mb-3 font-semibold">Go Live</h2>
-        <select
-          value={service}
-          onChange={(e) => setService(e.target.value)}
-          disabled={isLive}
-          className="w-full p-3 mb-3 bg-white/10 rounded-xl text-white text-sm"
-        >
-          <option value="">Select Service</option>
-          {SERVICES.map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
-        <div className="flex justify-between items-center">
-          <span className={isLive ? "text-green-400 font-semibold" : "text-gray-400"}>
-            {isLive ? "🟢 You are Live" : "⚫ Offline"}
-          </span>
-          <button onClick={toggleLive} disabled={liveLoading}>
-            {isLive
-              ? <FaToggleOn className="text-green-400 text-4xl" />
-              : <FaToggleOff className="text-white/40 text-4xl" />
-            }
-          </button>
-        </div>
+      {/* SEARCH */}
+      <input
+        placeholder="Search products or category..."
+        className="w-full p-2 bg-black/30 rounded"
+        onChange={(e) => setSearch(e.target.value)}
+      />
+
+      {/* TABS */}
+      <div className="flex gap-2">
+        <button onClick={() => setFeedTab("products")}>Products</button>
+        <button onClick={() => setFeedTab("feed")}>Feed</button>
+        <button onClick={() => setFeedTab("map")}>Map</button>
+        <button onClick={() => setFeedTab("bookings")}>Bookings</button>
       </div>
 
-      {/* ========== PRODUCTS ========== */}
-      <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
-        <div className="flex justify-between items-center mb-3">
-          <h2 className="font-semibold">My Products</h2>
-          <button
-            onClick={() => setShowUpload(!showUpload)}
-            className="flex items-center gap-1 text-xs bg-green-600 hover:bg-green-700 px-3 py-1 rounded-full transition"
-          >
-            <FaPlus size={10} /> Add Product
-          </button>
-        </div>
-
-        {/* Upload Form */}
-        {showUpload && (
-          <div className="bg-white/5 rounded-xl p-4 mb-4 space-y-3">
-            <input
-              placeholder="Product Title *"
-              value={form.title}
-              onChange={(e) => setForm({ ...form, title: e.target.value })}
-              className="w-full p-3 bg-white/10 rounded-xl text-white text-sm placeholder-gray-500 outline-none"
-            />
-            <input
-              placeholder="Price (₦) *"
-              type="number"
-              value={form.price}
-              onChange={(e) => setForm({ ...form, price: e.target.value })}
-              className="w-full p-3 bg-white/10 rounded-xl text-white text-sm placeholder-gray-500 outline-none"
-            />
-            <select
-              value={form.category}
-              onChange={(e) => setForm({ ...form, category: e.target.value })}
-              className="w-full p-3 bg-white/10 rounded-xl text-white text-sm outline-none"
+      {/* ================= PRODUCTS / FEED ================= */}
+      {feedTab === "products" && (
+        <div>
+          {filteredProducts.map((p) => (
+            <div
+              key={p.id}
+              className="p-3 border-b border-white/10 flex justify-between"
             >
-              <option value="">Select Category *</option>
-              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <textarea
-              placeholder="Description (optional)"
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-              rows={2}
-              className="w-full p-3 bg-white/10 rounded-xl text-white text-sm placeholder-gray-500 outline-none"
-            />
-            <div>
-              <label className="text-xs text-gray-400 mb-1 block">Product Image</label>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(e) => setForm({ ...form, file: e.target.files[0] })}
-                className="text-gray-400 text-sm"
-              />
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={uploadProduct}
-                disabled={uploading}
-                className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 py-2 rounded-xl text-sm font-semibold transition"
-              >
-                {uploading ? "Uploading..." : "Upload Product"}
-              </button>
-              <button
-                onClick={() => setShowUpload(false)}
-                className="px-4 bg-white/10 hover:bg-white/20 rounded-xl text-sm transition"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Products List */}
-        {products.length === 0 ? (
-          <p className="text-gray-500 text-sm">No products yet. Add one above!</p>
-        ) : (
-          <div className="flex gap-4 overflow-x-auto pb-2">
-            {products.map((p) => (
-              <div key={p.id} className="flex flex-col items-center min-w-[90px]">
-                <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-green-500 flex items-center justify-center bg-white/10">
-                  {p.image_url
-                    ? <img src={p.image_url} alt={p.title} className="w-full h-full object-cover" />
-                    : <span className="text-2xl">📦</span>
-                  }
-                </div>
-                <p className="text-xs mt-1 text-center truncate w-20">{p.title}</p>
-                <p className="text-xs text-green-400">₦{Number(p.price).toLocaleString()}</p>
-                <p className="text-xs text-gray-500 font-mono">{getCountdown(p.created_at, now)}</p>
-                <button
-                  onClick={() => deleteProduct(p)}
-                  className="text-red-400 text-xs mt-1 hover:text-red-300"
-                >
-                  <FaTrash size={10} />
-                </button>
+              <div>
+                <p>{p.title}</p>
+                <p className="text-xs text-gray-400">{p.category}</p>
               </div>
+              <button onClick={() => openChat(p.worker_id)}>
+                <FaComment />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ================= TIKTOK FEED ================= */}
+      {feedTab === "feed" && (
+        <div className="space-y-3">
+          {products.map((p) => (
+            <div key={p.id} className="bg-black/30 p-3 rounded-xl">
+              <p className="font-bold">{p.title}</p>
+              <p className="text-sm text-gray-400">{p.description}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ================= MAP ================= */}
+      {feedTab === "map" && (
+        <div className="bg-black/30 p-4 rounded">
+          <p className="mb-2">Live Workers</p>
+          {workers.map((w, i) => (
+            <div key={i} className="text-sm border-b border-white/10 py-1">
+              {w.category} - {w.status || "offline"}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ================= BOOKINGS ================= */}
+      {feedTab === "bookings" && (
+        <div>
+          {bookings.map((b) => (
+            <div key={b.id} className="p-2 border-b border-white/10">
+              <p>New Hire Request</p>
+              <p className="text-xs text-gray-400">{b.status}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ================= CHAT PANEL ================= */}
+      {chatUser && (
+        <div className="fixed bottom-0 left-0 right-0 bg-black p-3">
+          <div className="h-40 overflow-y-auto">
+            {messages.map((m, i) => (
+              <p key={i} className="text-sm">
+                {m.content}
+              </p>
             ))}
           </div>
-        )}
-      </div>
 
-      {/* ========== BOOKINGS ========== */}
-      <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <FaClock className="text-green-400" />
-          <h3 className="font-semibold">Hire Requests</h3>
-          <FaClipboardList
-            className="cursor-pointer text-gray-400 ml-auto"
-            onClick={() => navigate("/Bookings")}
+          <input
+            className="w-full p-2 mt-2 bg-gray-800"
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
           />
+
+          <button onClick={sendMessage} className="mt-2 bg-green-600 p-2">
+            Send
+          </button>
         </div>
-
-        {bookings.length === 0 ? (
-          <p className="text-gray-500 text-sm">No hire requests yet.</p>
-        ) : (
-          bookings.map((b) => (
-            <div key={b.id} className="py-3 border-b border-white/10">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-sm font-medium">
-                    {b.profiles?.full_name ? `From: ${b.profiles.full_name}` : "Client Request"}
-                  </p>
-                  <p className="text-sm text-gray-300">{b.job_description || "Job Request"}</p>
-                  <p className="text-xs text-gray-500">📍 {b.location}</p>
-                  <p className="text-xs text-gray-500">{formatDate(b.created_at)}</p>
-                </div>
-                <span className={`text-xs px-2 py-1 rounded-full ${BOOKING_STATUS_COLOR[b.status] || BOOKING_STATUS_COLOR.pending}`}>
-                  {b.status || "pending"}
-                </span>
-              </div>
-
-              {(!b.status || b.status === "pending") && (
-                <div className="flex gap-2 mt-2">
-                  <button
-                    onClick={() => updateBookingStatus(b.id, "accepted")}
-                    className="flex-1 bg-green-600 hover:bg-green-700 py-1 rounded-lg text-xs font-semibold transition"
-                  >
-                    Accept
-                  </button>
-                  <button
-                    onClick={() => updateBookingStatus(b.id, "rejected")}
-                    className="flex-1 bg-red-600 hover:bg-red-700 py-1 rounded-lg text-xs font-semibold transition"
-                  >
-                    Reject
-                  </button>
-                </div>
-              )}
-            </div>
-          ))
-        )}
-      </div>
+      )}
     </div>
   );
 }
