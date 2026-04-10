@@ -277,7 +277,7 @@ export default function BuyerWorkspace() {
 
       {/* ORDERS */}
       <div className="mb-6">
-        <h2 className="font-semibold mb-2">Product Orders</h2>
+        <h2 className="font-semibold mb-2">Worker status</h2>
 
         {formattedOrders.length === 0 ? (
           <p className="text-sm text-gray-400">No orders yet</p>
@@ -365,7 +365,7 @@ export default function BuyerWorkspace() {
 
       <div className="bg-white/5 p-4 rounded-xl">
         <h2 className="font-semibold mb-2">
-          General Workers
+          Hire Workers
         </h2>
 
         {filteredWorkers.general.map((w) => (
