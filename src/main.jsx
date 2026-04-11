@@ -6,11 +6,9 @@ import { AuthProvider } from "./context/AuthContext";
 import ErrorBoundary from "./ErrorBoundary.jsx";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
-  <React.StrictMode>
-    <ErrorBoundary>
-      <AuthProvider>
-        <App />
-      </AuthProvider>
-    </ErrorBoundary>
-  </React.StrictMode>
+  <ErrorBoundary>
+    <AuthProvider>
+      <App />
+    </AuthProvider>
+  </ErrorBoundary>
 );

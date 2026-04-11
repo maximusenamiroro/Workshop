@@ -1,29 +1,35 @@
 import { useState, useEffect } from "react";
 import {
-  FaBell,
-  FaToggleOn,
-  FaToggleOff,
-  FaTrash,
-  FaPlus,
-  FaSearch,
-  FaClipboardList,
+  FaBell, FaToggleOn, FaToggleOff,
+  FaTrash, FaPlus, FaSearch, FaClipboardList,
 } from "react-icons/fa";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
+import { useNavigate } from "react-router-dom";
+
+const BOOKING_STATUS_COLOR = {
+  accepted: "bg-green-500/20 text-green-400",
+  rejected: "bg-red-500/20 text-red-400",
+  pending: "bg-yellow-500/20 text-yellow-400",
+};
+
+const formatDate = (dateStr) =>
+  new Date(dateStr).toLocaleDateString("en-US", {
+    month: "short", day: "numeric",
+    hour: "2-digit", minute: "2-digit",
+  });
 
 export default function SellerWorkstation() {
   const { user } = useAuth();
+  const navigate = useNavigate();
 
   const [products, setProducts] = useState([]);
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
-
   const [isLive, setIsLive] = useState(false);
   const [service, setService] = useState("");
   const [liveLoading, setLiveLoading] = useState(false);
-
   const [workerCategory, setWorkerCategory] = useState(null);
-
   const [showUpload, setShowUpload] = useState(false);
   const [uploading, setUploading] = useState(false);
 
@@ -34,50 +40,80 @@ export default function SellerWorkstation() {
     file: null,
   });
 
-  // ================= INIT =================
   useEffect(() => {
     if (!user) return;
     fetchAll();
+
+    const bookingsChannel = supabase
+      .channel(`workstation_bookings_${user.id}`)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "hire_requests",
+        filter: `worker_id=eq.${user.id}`,
+      }, fetchBookings)
+      .subscribe();
+
+    return () => supabase.removeChannel(bookingsChannel);
   }, [user]);
 
   const fetchAll = async () => {
     await Promise.all([
+      fetchWorkerCategory(),
+      fetchLiveStatus(),
       fetchProducts(),
       fetchBookings(),
-      fetchLiveStatus(),
-      fetchWorkerCategory(),
     ]);
     setLoading(false);
   };
 
   // ================= CATEGORY =================
   const fetchWorkerCategory = async () => {
-    const { data } = await supabase
-      .from("workers")
-      .select("category")
-      .eq("worker_id", user.id)
-      .maybeSingle();
+    try {
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser) return;
 
-    setWorkerCategory(data?.category || null);
+      const { data, error } = await supabase
+        .from("workers")
+        .select("category, category_group")
+        .eq("id", currentUser.id)
+        .maybeSingle();
+
+      if (error) {
+        console.error("Category fetch error:", error.message);
+        return;
+      }
+
+      setWorkerCategory(data?.category || null);
+    } catch (err) {
+      console.error("fetchWorkerCategory failed:", err.message);
+    }
   };
 
   // ================= LIVE STATUS =================
   const fetchLiveStatus = async () => {
-    const { data } = await supabase
-      .from("live_workers")
-      .select("id, service")
-      .eq("worker_id", user.id)
-      .maybeSingle();
+    try {
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser) return;
 
-    if (data) {
-      setIsLive(true);
-      setService(data.service || "");
-    } else {
-      setIsLive(false);
+      const { data } = await supabase
+        .from("live_workers")
+        .select("id, service")
+        .eq("worker_id", currentUser.id)
+        .maybeSingle();
+
+      if (data) {
+        setIsLive(true);
+        setService(data.service || "");
+      } else {
+        setIsLive(false);
+      }
+    } catch (err) {
+      console.error("fetchLiveStatus failed:", err.message);
     }
   };
 
-  // ================= CATEGORY RESOLVER (CORE LOGIC) =================
+  // ================= CATEGORY RESOLVER =================
   const resolveCategory = (fallbackService = "") => {
     return (
       workerCategory?.trim() ||
@@ -90,147 +126,164 @@ export default function SellerWorkstation() {
   // ================= TOGGLE LIVE =================
   const toggleLive = async () => {
     setLiveLoading(true);
-
     try {
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser) throw new Error("Not authenticated");
+
       const finalService = resolveCategory(service);
 
       if (isLive) {
-        await supabase
+        const { error } = await supabase
           .from("live_workers")
           .delete()
-          .eq("worker_id", user.id);
-
+          .eq("worker_id", currentUser.id);
+        if (error) throw error;
         setIsLive(false);
       } else {
-        await supabase.from("live_workers").upsert({
-          worker_id: user.id,
-          service: finalService,
-          updated_at: new Date().toISOString(),
-        });
-
+        const { error } = await supabase
+          .from("live_workers")
+          .upsert({
+            worker_id: currentUser.id,
+            service: finalService,
+            updated_at: new Date().toISOString(),
+          });
+        if (error) throw error;
         setIsLive(true);
         setService(finalService);
       }
     } catch (err) {
-      alert(err.message);
+      alert("Failed: " + err.message);
+    } finally {
+      setLiveLoading(false);
     }
-
-    setLiveLoading(false);
   };
 
   // ================= PRODUCTS =================
   const fetchProducts = async () => {
-    const { data } = await supabase
-      .from("products")
-      .select("*")
-      .eq("worker_id", user.id)
-      .order("created_at", { ascending: false });
+    try {
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser) return;
 
-    setProducts(data || []);
+      const { data } = await supabase
+        .from("products")
+        .select("id, title, category, price, image_url, created_at")
+        .eq("worker_id", currentUser.id)
+        .order("created_at", { ascending: false });
+
+      setProducts(data || []);
+    } catch (err) {
+      console.error("fetchProducts failed:", err.message);
+    }
   };
 
-  // ================= UPLOAD PRODUCT =================
   const uploadProduct = async () => {
-    if (!form.title || !form.price) {
-      return alert("Title and price required");
-    }
-
+    if (!form.title || !form.price) return alert("Title and price required");
     setUploading(true);
-
     try {
-      let imageUrl = null;
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser) throw new Error("Not authenticated");
 
+      let imageUrl = null;
       if (form.file) {
         const ext = form.file.name.split(".").pop();
-        const fileName = `${user.id}_${Date.now()}.${ext}`;
-
-        await supabase.storage
+        const fileName = `${currentUser.id}_${Date.now()}.${ext}`;
+        const { error: uploadError } = await supabase.storage
           .from("products")
           .upload(fileName, form.file);
-
-        const { data } = supabase.storage
+        if (uploadError) throw uploadError;
+        const { data: urlData } = supabase.storage
           .from("products")
           .getPublicUrl(fileName);
-
-        imageUrl = data.publicUrl;
+        imageUrl = urlData.publicUrl;
       }
 
-      // ================= CATEGORY LOGIC =================
       const finalCategory = resolveCategory(service);
 
-      await supabase.from("products").insert({
-        worker_id: user.id,
+      const { error } = await supabase.from("products").insert({
+        worker_id: currentUser.id,
         title: form.title,
-        description: form.description,
+        description: form.description || "",
         price: parseFloat(form.price),
         category: finalCategory,
         image_url: imageUrl,
       });
+      if (error) throw error;
 
-      setForm({
-        title: "",
-        description: "",
-        price: "",
-        file: null,
-      });
-
+      setForm({ title: "", description: "", price: "", file: null });
       setShowUpload(false);
       fetchProducts();
-
-      alert(`Product posted under "${finalCategory}"`);
+      alert(`✅ Product posted under "${finalCategory}"`);
     } catch (err) {
       alert("Upload failed: " + err.message);
+    } finally {
+      setUploading(false);
     }
-
-    setUploading(false);
   };
 
-  // ================= DELETE =================
   const deleteProduct = async (product) => {
-    await supabase
-      .from("products")
-      .delete()
-      .eq("id", product.id);
-
-    fetchProducts();
+    try {
+      await supabase.from("products").delete().eq("id", product.id);
+      if (product.image_url) {
+        const fileName = product.image_url.split("/").pop();
+        await supabase.storage.from("products").remove([fileName]);
+      }
+      fetchProducts();
+    } catch (err) {
+      console.error("deleteProduct failed:", err.message);
+    }
   };
 
   // ================= BOOKINGS =================
   const fetchBookings = async () => {
-    const { data } = await supabase
-      .from("hire_requests")
-      .select("*")
-      .eq("worker_id", user.id)
-      .limit(5);
+    try {
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser) return;
 
-    setBookings(data || []);
+      const { data } = await supabase
+        .from("hire_requests")
+        .select("id, status, created_at, job_description, location, client_id")
+        .eq("worker_id", currentUser.id)
+        .order("created_at", { ascending: false })
+        .limit(10);
+
+      setBookings(data || []);
+    } catch (err) {
+      console.error("fetchBookings failed:", err.message);
+    }
+  };
+
+  const updateBookingStatus = async (id, status) => {
+    const { error } = await supabase
+      .from("hire_requests")
+      .update({ status })
+      .eq("id", id);
+    if (error) alert("Failed to update: " + error.message);
+    else fetchBookings();
   };
 
   // ================= UI =================
-  if (loading) {
-    return <div className="text-white p-6">Loading workstation...</div>;
-  }
+  if (loading) return (
+    <div className="min-h-screen bg-[#1A1A1A] flex items-center justify-center text-white">
+      <div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
 
   return (
-    <div className="min-h-screen bg-[#1A1A1A] text-white p-4 space-y-6">
+    <div className="min-h-screen bg-[#1A1A1A] text-white p-4 space-y-6 pb-24">
 
       {/* HEADER */}
       <div className="flex justify-between items-center">
-        
-        {/* LEFT SIDE (BOOKINGS + SEARCH) */}
         <div className="flex items-center gap-3">
-          <button className="flex items-center gap-1 text-sm bg-white/10 px-2 py-1 rounded">
+          <button
+            onClick={() => navigate("/Bookings")}
+            className="flex items-center gap-1 text-sm bg-white/10 px-2 py-1 rounded"
+          >
             <FaClipboardList />
             Bookings
           </button>
-
           <FaSearch className="text-gray-300 cursor-pointer" />
         </div>
-
-        {/* TITLE */}
         <h1 className="text-xl font-semibold">Workstation</h1>
-
-        {/* RIGHT SIDE */}
         <FaBell />
       </div>
 
@@ -244,91 +297,201 @@ export default function SellerWorkstation() {
 
       {/* LIVE SYSTEM */}
       <div className="bg-white/5 p-4 rounded-xl">
-        <p className="text-sm mb-2 text-gray-400">
-          Go Live (clients can see you)
-        </p>
-
+        <p className="text-sm mb-2 text-gray-400">Go Live (clients can see you)</p>
         <select
           value={service}
           onChange={(e) => setService(e.target.value)}
-          className="w-full p-2 mb-3 bg-black/30 rounded"
+          disabled={isLive}
+          className="w-full p-2 mb-3 bg-black/30 rounded text-white"
         >
-          <option value="">Auto (Use Category)</option>
+          <option value="">
+            Auto (Use Category: {workerCategory || "General"})
+          </option>
           <option value="Cleaning">Cleaning</option>
           <option value="Plumbing">Plumbing</option>
           <option value="Electrical">Electrical</option>
+          <option value="Driving">Driving</option>
+          <option value="Carpentry">Carpentry</option>
+          <option value="Security">Security</option>
+          <option value="Delivery">Delivery</option>
+          <option value="Tailoring">Tailoring</option>
+          <option value="Painting">Painting</option>
+          <option value="Welding">Welding</option>
         </select>
 
-        <button onClick={toggleLive} disabled={liveLoading}>
-          {isLive ? (
-            <FaToggleOn size={32} className="text-green-400" />
-          ) : (
-            <FaToggleOff size={32} />
-          )}
-        </button>
+        <div className="flex items-center justify-between">
+          <span className={isLive ? "text-green-400 font-semibold" : "text-gray-400"}>
+            {isLive ? "🟢 You are Live" : "⚫ Offline"}
+          </span>
+          <button onClick={toggleLive} disabled={liveLoading}>
+            {liveLoading ? (
+              <div className="w-6 h-6 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+            ) : isLive ? (
+              <FaToggleOn size={32} className="text-green-400" />
+            ) : (
+              <FaToggleOff size={32} className="text-gray-400" />
+            )}
+          </button>
+        </div>
       </div>
 
       {/* PRODUCTS */}
       <div className="bg-white/5 p-4 rounded-xl">
         <div className="flex justify-between items-center mb-3">
-          <h2>My Products</h2>
+          <h2 className="font-semibold">My Products</h2>
           <button onClick={() => setShowUpload(!showUpload)}>
-            <FaPlus />
+            <FaPlus className="text-green-400" />
           </button>
         </div>
 
-        {/* UPLOAD FORM */}
         {showUpload && (
-          <div className="space-y-2 mb-4">
+          <div className="space-y-2 mb-4 bg-black/20 p-3 rounded-xl">
             <input
-              placeholder="Title"
-              className="w-full p-2 bg-black/30 rounded"
-              onChange={(e) =>
-                setForm({ ...form, title: e.target.value })
-              }
+              placeholder="Title *"
+              value={form.title}
+              className="w-full p-2 bg-black/30 rounded text-white placeholder-gray-500 outline-none"
+              onChange={(e) => setForm({ ...form, title: e.target.value })}
             />
-
             <input
-              placeholder="Price"
+              placeholder="Price (₦) *"
               type="number"
-              className="w-full p-2 bg-black/30 rounded"
-              onChange={(e) =>
-                setForm({ ...form, price: e.target.value })
-              }
+              value={form.price}
+              className="w-full p-2 bg-black/30 rounded text-white placeholder-gray-500 outline-none"
+              onChange={(e) => setForm({ ...form, price: e.target.value })}
             />
-
-            <input
-              type="file"
-              onChange={(e) =>
-                setForm({ ...form, file: e.target.files[0] })
-              }
+            <textarea
+              placeholder="Description (optional)"
+              value={form.description}
+              rows={2}
+              className="w-full p-2 bg-black/30 rounded text-white placeholder-gray-500 outline-none"
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
             />
-
-            <button
-              onClick={uploadProduct}
-              className="bg-green-600 px-3 py-2 rounded"
-            >
-              {uploading ? "Uploading..." : "Upload Product"}
-            </button>
+            <div>
+              <label className="text-xs text-gray-400 block mb-1">
+                Product Image
+              </label>
+              <input
+                type="file"
+                accept="image/*"
+                className="text-gray-400 text-sm"
+                onChange={(e) => setForm({ ...form, file: e.target.files[0] })}
+              />
+            </div>
+            <p className="text-xs text-gray-500">
+              Category: {resolveCategory(service)}
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={uploadProduct}
+                disabled={uploading}
+                className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 px-3 py-2 rounded text-sm font-semibold transition"
+              >
+                {uploading ? "Uploading..." : "Upload Product"}
+              </button>
+              <button
+                onClick={() => setShowUpload(false)}
+                className="px-3 py-2 bg-white/10 rounded text-sm"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         )}
 
-        {/* PRODUCT LIST */}
-        {products.map((p) => (
-          <div
-            key={p.id}
-            className="flex justify-between items-center py-2 border-b border-white/10"
-          >
-            <div>
-              <p>{p.title}</p>
-              <p className="text-xs text-gray-400">{p.category}</p>
+        {products.length === 0 ? (
+          <p className="text-gray-500 text-sm">No products yet.</p>
+        ) : (
+          products.map((p) => (
+            <div
+              key={p.id}
+              className="flex justify-between items-center py-2 border-b border-white/10"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full overflow-hidden bg-white/10 flex items-center justify-center">
+                  {p.image_url ? (
+                    <img
+                      src={p.image_url}
+                      alt={p.title}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <span>📦</span>
+                  )}
+                </div>
+                <div>
+                  <p className="text-sm font-medium">{p.title}</p>
+                  <p className="text-xs text-gray-400">
+                    {p.category} • ₦{Number(p.price).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => deleteProduct(p)}
+                className="text-red-400 hover:text-red-300"
+              >
+                <FaTrash size={12} />
+              </button>
             </div>
+          ))
+        )}
+      </div>
 
-            <button onClick={() => deleteProduct(p)}>
-              <FaTrash />
-            </button>
-          </div>
-        ))}
+      {/* BOOKINGS */}
+      <div className="bg-white/5 p-4 rounded-xl">
+        <h2 className="font-semibold mb-3">Hire Requests</h2>
+
+        {bookings.length === 0 ? (
+          <p className="text-gray-500 text-sm">No hire requests yet.</p>
+        ) : (
+          bookings.map((b) => (
+            <div key={b.id} className="py-3 border-b border-white/10">
+              <div className="flex justify-between items-start mb-2">
+                <div>
+                  <p className="text-sm font-medium">
+                    {b.job_description || "Job Request"}
+                  </p>
+                  <p className="text-xs text-gray-500">📍 {b.location}</p>
+                  <p className="text-xs text-gray-500">
+                    {formatDate(b.created_at)}
+                  </p>
+                </div>
+                <span
+                  className={`text-xs px-2 py-1 rounded-full ${
+                    BOOKING_STATUS_COLOR[b.status] || BOOKING_STATUS_COLOR.pending
+                  }`}
+                >
+                  {b.status || "pending"}
+                </span>
+              </div>
+
+              {(!b.status || b.status === "pending") && (
+                <div className="flex gap-2 mt-2">
+                  <button
+                    onClick={() => updateBookingStatus(b.id, "accepted")}
+                    className="flex-1 bg-green-600 hover:bg-green-700 py-1.5 rounded-lg text-xs font-semibold transition"
+                  >
+                    ✅ Accept
+                  </button>
+                  <button
+                    onClick={() => updateBookingStatus(b.id, "rejected")}
+                    className="flex-1 bg-red-600/20 hover:bg-red-600/40 text-red-400 py-1.5 rounded-lg text-xs font-semibold transition"
+                  >
+                    ❌ Reject
+                  </button>
+                </div>
+              )}
+
+              {b.status === "accepted" && (
+                <button
+                  onClick={() => navigate("/inbox")}
+                  className="w-full mt-2 bg-white/10 hover:bg-white/20 py-1.5 rounded-lg text-xs transition"
+                >
+                  💬 Message Client
+                </button>
+              )}
+            </div>
+          ))
+        )}
       </div>
     </div>
   );

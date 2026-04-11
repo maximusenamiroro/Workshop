@@ -34,9 +34,10 @@ export default function ProductCatalogue() {
   const fetchProducts = async () => {
     setLoading(true);
     try {
+      // Fetch products without profiles join — join separately
       let query = supabase
         .from("products")
-        .select("id, title, category, price, image_url, description, worker_id, profiles(full_name)")
+        .select("id, title, category, price, image_url, description, worker_id")
         .order("created_at", { ascending: false });
 
       if (activeCategory !== "All") {
@@ -45,7 +46,31 @@ export default function ProductCatalogue() {
 
       const { data, error } = await query;
       if (error) throw error;
-      setProducts(data || []);
+
+      const productsData = data || [];
+
+      // Fetch seller names separately
+      const workerIds = [...new Set(productsData.map(p => p.worker_id).filter(Boolean))];
+
+      let profileMap = {};
+      if (workerIds.length > 0) {
+        const { data: profilesData } = await supabase
+          .from("profiles")
+          .select("id, full_name")
+          .in("id", workerIds);
+
+        (profilesData || []).forEach(p => {
+          profileMap[p.id] = p.full_name;
+        });
+      }
+
+      // Merge seller name into products
+      const merged = productsData.map(p => ({
+        ...p,
+        seller_name: profileMap[p.worker_id] || "Seller",
+      }));
+
+      setProducts(merged);
     } catch (err) {
       console.error("Fetch products error:", err.message);
     } finally {
@@ -63,8 +88,6 @@ export default function ProductCatalogue() {
       {/* HEADER */}
       <div className="px-4 pt-6 pb-3">
         <h1 className="text-xl font-bold mb-4">Shop</h1>
-
-        {/* Search */}
         <input
           type="text"
           placeholder="Search products..."
@@ -111,7 +134,6 @@ export default function ProductCatalogue() {
                 onClick={() => navigate(`/product/${product.id}`)}
                 className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden cursor-pointer hover:bg-white/10 transition"
               >
-                {/* Product Image */}
                 <div className="w-full h-40 bg-white/10 flex items-center justify-center">
                   {product.image_url ? (
                     <img
@@ -125,13 +147,9 @@ export default function ProductCatalogue() {
                     </span>
                   )}
                 </div>
-
-                {/* Product Info */}
                 <div className="p-3">
                   <p className="font-semibold text-sm truncate">{product.title}</p>
-                  <p className="text-xs text-gray-400 mt-1">
-                    {product.profiles?.full_name || "Seller"}
-                  </p>
+                  <p className="text-xs text-gray-400 mt-1">{product.seller_name}</p>
                   <p className="text-green-400 font-bold text-sm mt-2">
                     ₦{Number(product.price).toLocaleString()}
                   </p>

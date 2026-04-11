@@ -35,7 +35,13 @@ export default function Signup() {
   };
 
   const handleAccountType = (type) => {
-    setForm({ ...form, accountType: type, category_group: "", category: "", otherCategory: "" });
+    setForm({
+      ...form,
+      accountType: type,
+      category_group: "",
+      category: "",
+      otherCategory: "",
+    });
   };
 
   const handleSubmit = async (e) => {
@@ -43,23 +49,21 @@ export default function Signup() {
     setLoading(true);
     setError("");
 
+    // Basic validation
     if (!form.name || !form.email || !form.password) {
       setError("Please fill name, email and password");
       setLoading(false);
       return;
     }
 
+    if (!form.country) {
+      setError("Please select your country");
+      setLoading(false);
+      return;
+    }
+
+    // Worker validation — category is optional
     if (form.accountType === "worker") {
-      if (!form.category_group) {
-        setError("Please select business group");
-        setLoading(false);
-        return;
-      }
-      if (!form.category) {
-        setError("Please select category");
-        setLoading(false);
-        return;
-      }
       if (form.category === "Other Business" && !form.otherCategory) {
         setError("Please specify your category");
         setLoading(false);
@@ -68,48 +72,57 @@ export default function Signup() {
     }
 
     try {
+      // Step 1 — Create auth user
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: form.email,
         password: form.password,
       });
 
       if (authError) throw authError;
+      if (!authData.user) throw new Error("Account creation failed. Please try again.");
 
-      if (authData.user) {
-        const { error: profileError } = await supabase.from("profiles").insert({
-          id: authData.user.id,
-          full_name: form.name,
-          phone: form.phone || null,
-          role: form.accountType,
-          country: form.country || null,
+      const userId = authData.user.id;
+
+      // Step 2 — Create profile
+      const { error: profileError } = await supabase.from("profiles").insert({
+        id: userId,
+        full_name: form.name,
+        phone: form.phone || null,
+        role: form.accountType,
+        country: form.country || null,
+      });
+
+      if (profileError) throw new Error("Profile creation failed: " + profileError.message);
+
+      // Step 3 — Create worker row
+      // Category is optional — if not picked they are a general worker
+      if (form.accountType === "worker") {
+        const workerCategory = form.category === "Other Business"
+          ? form.otherCategory.trim()
+          : form.category?.trim() || null; // null if no category picked = general worker
+
+        const handSkillFlag = form.category_group === "Handwork & Skilled Workers";
+
+        const { error: workerError } = await supabase.from("workers").insert({
+          id: userId,
+          category_group: form.category_group?.trim() || null,
+          category: workerCategory,
+          hand_skill: handSkillFlag,
+          location: form.location?.trim() || null,
         });
 
-        if (profileError) throw profileError;
-
-        if (form.accountType === "worker") {
-          const workerCategory = form.category === "Other Business"
-            ? form.otherCategory
-            : form.category;
-
-          const handSkillFlag = form.category_group === "Handwork & Skilled Workers";
-
-          const { error: workerError } = await supabase.from("workers").insert({
-            id: authData.user.id,
-            category_group: form.category_group,
-            category: workerCategory,
-            hand_skill: handSkillFlag,
-            location: form.location || null,
-          });
-
-          if (workerError) console.error("Worker insert error:", workerError);
+        if (workerError) {
+          console.error("Worker insert error:", workerError);
+          throw new Error("Worker profile creation failed: " + workerError.message);
         }
-
-        alert(`✅ Account created successfully as ${form.accountType}!`);
-        navigate("/reels");
       }
+
+      alert(`✅ Account created successfully as ${form.accountType}!`);
+      navigate("/reels");
+
     } catch (err) {
-      console.error(err);
-      setError(err.message || "Failed to create account");
+      console.error("Signup error:", err);
+      setError(err.message || "Failed to create account. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -119,13 +132,17 @@ export default function Signup() {
     <div className="min-h-screen bg-[#0B0F19] text-white p-4 flex items-center justify-center">
       <div className="w-full max-w-md">
 
+        {/* Header */}
         <div className="text-center mb-10">
           <h1 className="text-3xl font-bold">Create Account</h1>
           <p className="text-gray-400 mt-2">Join Workshop</p>
         </div>
 
+        {/* Error */}
         {error && (
-          <div className="bg-red-500/10 border border-red-500 text-red-400 p-4 rounded-2xl mb-6">{error}</div>
+          <div className="bg-red-500/10 border border-red-500 text-red-400 p-4 rounded-2xl mb-6">
+            {error}
+          </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
@@ -135,47 +152,103 @@ export default function Signup() {
             <button
               type="button"
               onClick={() => handleAccountType("client")}
-              className={`flex-1 py-4 rounded-2xl font-medium ${form.accountType === "client" ? "bg-green-500" : "bg-gray-800"}`}
+              className={`flex-1 py-4 rounded-2xl font-medium transition ${
+                form.accountType === "client" ? "bg-green-500" : "bg-gray-800"
+              }`}
             >
               Client
             </button>
             <button
               type="button"
               onClick={() => handleAccountType("worker")}
-              className={`flex-1 py-4 rounded-2xl font-medium ${form.accountType === "worker" ? "bg-green-500" : "bg-gray-800"}`}
+              className={`flex-1 py-4 rounded-2xl font-medium transition ${
+                form.accountType === "worker" ? "bg-green-500" : "bg-gray-800"
+              }`}
             >
               Worker
             </button>
           </div>
 
-          <input type="text" name="name" placeholder="Full Name *" value={form.name} onChange={handleChange} required className="w-full p-4 bg-[#121826] rounded-2xl text-white" />
-          <input type="email" name="email" placeholder="Email *" value={form.email} onChange={handleChange} required className="w-full p-4 bg-[#121826] rounded-2xl text-white" />
-          <input type="tel" name="phone" placeholder="Phone Number" value={form.phone} onChange={handleChange} className="w-full p-4 bg-[#121826] rounded-2xl text-white" />
+          {/* Basic Info */}
+          <input
+            type="text"
+            name="name"
+            placeholder="Full Name *"
+            value={form.name}
+            onChange={handleChange}
+            required
+            className="w-full p-4 bg-[#121826] rounded-2xl text-white placeholder-gray-500 outline-none"
+          />
 
-          <select name="country" value={form.country} onChange={handleChange} required className="w-full p-4 bg-[#121826] rounded-2xl text-white">
+          <input
+            type="email"
+            name="email"
+            placeholder="Email *"
+            value={form.email}
+            onChange={handleChange}
+            required
+            className="w-full p-4 bg-[#121826] rounded-2xl text-white placeholder-gray-500 outline-none"
+          />
+
+          <input
+            type="tel"
+            name="phone"
+            placeholder="Phone Number"
+            value={form.phone}
+            onChange={handleChange}
+            className="w-full p-4 bg-[#121826] rounded-2xl text-white placeholder-gray-500 outline-none"
+          />
+
+          {/* Country */}
+          <select
+            name="country"
+            value={form.country}
+            onChange={handleChange}
+            required
+            className="w-full p-4 bg-[#121826] rounded-2xl text-white outline-none"
+          >
             <option value="">Select Country *</option>
-            {countries.map(c => <option key={c} value={c}>{c}</option>)}
+            {countries.map(c => (
+              <option key={c} value={c}>{c}</option>
+            ))}
           </select>
 
           {/* Worker Fields */}
           {form.accountType === "worker" && (
             <>
-              <select name="category_group" value={form.category_group} onChange={handleChange} className="w-full p-4 bg-[#121826] rounded-2xl text-white">
-                <option value="">Select Business Group</option>
+              <p className="text-xs text-gray-400">
+                Category is optional — skip if you are a general worker
+              </p>
+
+              {/* Business Group */}
+              <select
+                name="category_group"
+                value={form.category_group}
+                onChange={handleChange}
+                className="w-full p-4 bg-[#121826] rounded-2xl text-white outline-none"
+              >
+                <option value="">Select Business Group (optional)</option>
                 {Object.keys(businessCategories).map(group => (
                   <option key={group} value={group}>{group}</option>
                 ))}
               </select>
 
+              {/* Category */}
               {form.category_group && (
-                <select name="category" value={form.category} onChange={handleChange} className="w-full p-4 bg-[#121826] rounded-2xl text-white">
-                  <option value="">Select Category</option>
+                <select
+                  name="category"
+                  value={form.category}
+                  onChange={handleChange}
+                  className="w-full p-4 bg-[#121826] rounded-2xl text-white outline-none"
+                >
+                  <option value="">Select Category (optional)</option>
                   {businessCategories[form.category_group].map(item => (
                     <option key={item} value={item}>{item}</option>
                   ))}
                 </select>
               )}
 
+              {/* Other Category */}
               {form.category === "Other Business" && (
                 <input
                   type="text"
@@ -183,17 +256,18 @@ export default function Signup() {
                   placeholder="Specify your category"
                   value={form.otherCategory}
                   onChange={handleChange}
-                  className="w-full p-4 bg-[#121826] rounded-2xl text-white"
+                  className="w-full p-4 bg-[#121826] rounded-2xl text-white placeholder-gray-500 outline-none"
                 />
               )}
 
+              {/* Location */}
               <input
                 type="text"
                 name="location"
-                placeholder="Business Location"
+                placeholder="Business Location (optional)"
                 value={form.location}
                 onChange={handleChange}
-                className="w-full p-4 bg-[#121826] rounded-2xl text-white"
+                className="w-full p-4 bg-[#121826] rounded-2xl text-white placeholder-gray-500 outline-none"
               />
             </>
           )}
@@ -207,7 +281,7 @@ export default function Signup() {
               value={form.password}
               onChange={handleChange}
               required
-              className="w-full p-4 bg-[#121826] rounded-2xl pr-12 text-white"
+              className="w-full p-4 bg-[#121826] rounded-2xl pr-12 text-white placeholder-gray-500 outline-none"
             />
             <button
               type="button"
@@ -218,13 +292,29 @@ export default function Signup() {
             </button>
           </div>
 
+          {/* Submit */}
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-green-500 py-4 rounded-2xl font-semibold text-lg disabled:bg-gray-600"
+            className="w-full bg-green-500 hover:bg-green-600 py-4 rounded-2xl font-semibold text-lg disabled:bg-gray-600 transition"
           >
-            {loading ? "Creating Account..." : `Create ${form.accountType === "worker" ? "Worker" : "Client"} Account`}
+            {loading
+              ? "Creating Account..."
+              : `Create ${form.accountType === "worker" ? "Worker" : "Client"} Account`
+            }
           </button>
+
+          {/* Login link */}
+          <p className="text-center text-gray-400 text-sm">
+            Already have an account?{" "}
+            <span
+              onClick={() => navigate("/login")}
+              className="text-green-400 cursor-pointer hover:underline"
+            >
+              Login
+            </span>
+          </p>
+
         </form>
       </div>
     </div>

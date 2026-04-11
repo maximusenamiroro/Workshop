@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
 const AuthContext = createContext();
@@ -13,27 +13,30 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [initialized, setInitialized] = useState(false);
+  const initializedRef = useRef(false); // Use ref instead of state
 
   const loadProfile = async (userId) => {
-    try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", userId)
-        .single();
-      if (error) throw error;
-      setRole(data?.role || null);
-    } catch (err) {
+  try {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", userId)
+      .maybeSingle(); // changed from .single()
+
+    if (error) throw error;
+    setRole(data?.role || null);
+  } catch (err) {
+    if (err.name !== "AbortError") {
       console.error("Failed to load profile:", err.message);
-      setRole(null);
     }
-  };
+    setRole(null);
+  }
+};
 
   useEffect(() => {
     let mounted = true;
 
-    // Step 1 - handle initial session on page load/refresh
+    // Step 1 - handle initial session
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!mounted) return;
       if (session?.user) {
@@ -41,15 +44,13 @@ export const AuthProvider = ({ children }) => {
         await loadProfile(session.user.id);
       }
       setLoading(false);
-      setInitialized(true);
+      initializedRef.current = true;
     });
 
-    // Step 2 - handle auth events after initialization
+    // Step 2 - handle auth events
     const { data: listener } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (!mounted) return;
-
-        // Ignore initial events — getSession handles those
         if (event === "INITIAL_SESSION") return;
 
         if (event === "SIGNED_OUT") {
@@ -59,9 +60,7 @@ export const AuthProvider = ({ children }) => {
           return;
         }
 
-        // Only handle SIGNED_IN after initialization
-        // This means a real login happened not a page refresh
-        if (event === "SIGNED_IN" && initialized && session?.user) {
+        if (event === "SIGNED_IN" && initializedRef.current && session?.user) {
           setUser(session.user);
           await loadProfile(session.user.id);
           setLoading(false);
@@ -78,7 +77,7 @@ export const AuthProvider = ({ children }) => {
       mounted = false;
       listener.subscription.unsubscribe();
     };
-  }, [initialized]);
+  }, []); // Empty dependency array — runs once only
 
   const logout = async () => {
     try {

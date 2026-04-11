@@ -83,14 +83,14 @@ function ReelCard({ reel, onLikeUpdate }) {
   }, [reel.id, user]);
 
   const checkIfLiked = async () => {
-    const { data } = await supabase
-      .from("reel_likes")
-      .select("id")
-      .eq("reel_id", reel.id)
-      .eq("user_id", user.id)
-      .single();
-    setLiked(!!data);
-  };
+  const { data } = await supabase
+    .from("reel_likes")
+    .select("id")
+    .eq("reel_id", reel.id)
+    .eq("user_id", user.id)
+    .maybeSingle(); // was .single()
+  setLiked(!!data);
+};
 
   const fetchComments = async () => {
     const { data } = await supabase
@@ -102,38 +102,53 @@ function ReelCard({ reel, onLikeUpdate }) {
   };
 
   const toggleLike = async () => {
-    if (!user) return;
+  if (!user) return;
 
-    if (liked) {
-      // Unlike
-      await supabase
-        .from("reel_likes")
-        .delete()
-        .eq("reel_id", reel.id)
-        .eq("user_id", user.id);
+  if (liked) {
+    // Unlike
+    await supabase
+      .from("reel_likes")
+      .delete()
+      .eq("reel_id", reel.id)
+      .eq("user_id", user.id);
 
-      await supabase
-        .from("reels")
-        .update({ likes: likesCount - 1 })
-        .eq("id", reel.id);
+    setLiked(false);
+    setLikesCount((prev) => Math.max(0, prev - 1));
 
-      setLikesCount(likesCount - 1);
-    } else {
-      // Like
-      await supabase
-        .from("reel_likes")
-        .insert({ reel_id: reel.id, user_id: user.id });
+    // Sync count to reels table
+    await supabase
+      .from("reels")
+      .update({ likes: Math.max(0, likesCount - 1) })
+      .eq("id", reel.id);
 
-      await supabase
-        .from("reels")
-        .update({ likes: likesCount + 1 })
-        .eq("id", reel.id);
+  } else {
+    // Check not already liked (prevent duplicates)
+    const { data: existing } = await supabase
+      .from("reel_likes")
+      .select("id")
+      .eq("reel_id", reel.id)
+      .eq("user_id", user.id)
+      .maybeSingle();
 
-      setLikesCount(likesCount + 1);
+    if (existing) {
+      setLiked(true);
+      return;
     }
 
-    setLiked(!liked);
-  };
+    await supabase
+      .from("reel_likes")
+      .insert({ reel_id: reel.id, user_id: user.id });
+
+    setLiked(true);
+    setLikesCount((prev) => prev + 1);
+
+    // Sync count to reels table
+    await supabase
+      .from("reels")
+      .update({ likes: likesCount + 1 })
+      .eq("id", reel.id);
+  }
+};
 
   const toggleMute = () => {
     if (videoRef.current) {
