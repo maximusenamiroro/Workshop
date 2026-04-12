@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { useAuth } from "../../context/AuthContext";
 
 export default function Bookings() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [bookings, setBookings] = useState([]);
-  const [filter, setFilter] = useState("pending");
+  const [filter, setFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -14,10 +16,14 @@ export default function Bookings() {
       setLoading(true);
       setError(null);
 
+      // Get fresh auth user
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser) return;
+
       let query = supabase
         .from("hire_requests")
         .select("id, job_description, location, status, created_at, client_id")
-        .eq("worker_id", user.id)
+        .eq("worker_id", currentUser.id)
         .order("created_at", { ascending: false });
 
       if (filter !== "all") {
@@ -26,7 +32,31 @@ export default function Bookings() {
 
       const { data, error: supabaseError } = await query;
       if (supabaseError) throw supabaseError;
-      setBookings(data || []);
+
+      const bookingsData = data || [];
+
+      // Fetch client names separately
+      const clientIds = [...new Set(bookingsData.map(b => b.client_id).filter(Boolean))];
+      let clientMap = {};
+
+      if (clientIds.length > 0) {
+        const { data: profilesData } = await supabase
+          .from("profiles")
+          .select("id, full_name")
+          .in("id", clientIds);
+
+        (profilesData || []).forEach(p => {
+          clientMap[p.id] = p.full_name;
+        });
+      }
+
+      // Merge client names
+      const merged = bookingsData.map(b => ({
+        ...b,
+        client_name: clientMap[b.client_id] || "Client",
+      }));
+
+      setBookings(merged);
     } catch (err) {
       console.error("Error loading bookings:", err);
       setError("Failed to load bookings");
@@ -39,13 +69,27 @@ export default function Bookings() {
     if (user) loadBookings();
   }, [user, filter]);
 
+  // Real-time updates
+  useEffect(() => {
+    if (!user) return;
+    const channel = supabase
+      .channel(`bookings_page_${user.id}`)
+      .on("postgres_changes", {
+        event: "*", schema: "public",
+        table: "hire_requests",
+        filter: `worker_id=eq.${user.id}`,
+      }, loadBookings)
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
+  }, [user]);
+
   const updateStatus = async (id, status) => {
     try {
       const { error } = await supabase
         .from("hire_requests")
         .update({ status })
         .eq("id", id);
-
       if (error) throw error;
       loadBookings();
     } catch (err) {
@@ -62,7 +106,7 @@ export default function Bookings() {
   const getStatusColor = (status) => {
     switch (status) {
       case "accepted": return "bg-green-500/20 text-green-400";
-      case "rejected": case "cancelled": return "bg-red-500/20 text-red-400";
+      case "rejected": return "bg-red-500/20 text-red-400";
       default: return "bg-yellow-500/20 text-yellow-400";
     }
   };
@@ -74,14 +118,12 @@ export default function Bookings() {
 
       {/* FILTER TABS */}
       <div className="flex gap-2 mb-4 overflow-x-auto">
-        {["pending", "accepted", "rejected", "all"].map((f) => (
+        {["all", "pending", "accepted", "rejected"].map((f) => (
           <button
             key={f}
             onClick={() => setFilter(f)}
             className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition ${
-              filter === f
-                ? "bg-green-600 text-white"
-                : "bg-white/10 text-gray-400"
+              filter === f ? "bg-green-600 text-white" : "bg-white/10 text-gray-400"
             }`}
           >
             {f.charAt(0).toUpperCase() + f.slice(1)}
@@ -106,6 +148,10 @@ export default function Bookings() {
             <div key={booking.id} className="bg-[#1e293b] p-4 rounded-2xl space-y-3">
               <div className="flex justify-between items-start">
                 <div className="flex-1">
+                  {/* Client name */}
+                  <p className="text-xs text-green-400 mb-1">
+                    👤 {booking.client_name}
+                  </p>
                   <p className="font-semibold text-sm">
                     {booking.job_description || "Job Request"}
                   </p>
@@ -128,24 +174,24 @@ export default function Bookings() {
                     onClick={() => updateStatus(booking.id, "accepted")}
                     className="flex-1 bg-green-600 hover:bg-green-700 py-2 rounded-xl text-sm font-semibold transition"
                   >
-                    Accept
+                    ✅ Accept
                   </button>
                   <button
                     onClick={() => updateStatus(booking.id, "rejected")}
                     className="flex-1 bg-red-600/20 hover:bg-red-600/40 text-red-400 py-2 rounded-xl text-sm font-semibold transition"
                   >
-                    Decline
+                    ❌ Decline
                   </button>
                 </div>
               )}
 
-              {/* Message client button */}
-              {booking.status === "accepted" && (
+              {/* Message client — direct to their conversation */}
+              {booking.status === "accepted" && booking.client_id && (
                 <button
-                  onClick={() => {}}
+                  onClick={() => navigate(`/inbox?user=${booking.client_id}`)}
                   className="w-full bg-white/10 hover:bg-white/20 py-2 rounded-xl text-sm transition"
                 >
-                  💬 Message Client
+                  💬 Message {booking.client_name}
                 </button>
               )}
             </div>

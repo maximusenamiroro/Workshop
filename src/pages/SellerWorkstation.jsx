@@ -13,6 +13,14 @@ const BOOKING_STATUS_COLOR = {
   pending: "bg-yellow-500/20 text-yellow-400",
 };
 
+const ORDER_STATUS_COLOR = {
+  pending: "bg-yellow-500/20 text-yellow-400",
+  shipping: "bg-blue-500/20 text-blue-400",
+  "on the way": "bg-blue-500/20 text-blue-400",
+  arriving: "bg-purple-500/20 text-purple-400",
+  delivered: "bg-green-500/20 text-green-400",
+};
+
 const formatDate = (dateStr) =>
   new Date(dateStr).toLocaleDateString("en-US", {
     month: "short", day: "numeric",
@@ -25,6 +33,7 @@ export default function SellerWorkstation() {
 
   const [products, setProducts] = useState([]);
   const [bookings, setBookings] = useState([]);
+  const [productOrders, setProductOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isLive, setIsLive] = useState(false);
   const [service, setService] = useState("");
@@ -47,14 +56,25 @@ export default function SellerWorkstation() {
     const bookingsChannel = supabase
       .channel(`workstation_bookings_${user.id}`)
       .on("postgres_changes", {
-        event: "*",
-        schema: "public",
+        event: "*", schema: "public",
         table: "hire_requests",
         filter: `worker_id=eq.${user.id}`,
       }, fetchBookings)
       .subscribe();
 
-    return () => supabase.removeChannel(bookingsChannel);
+    // Real-time product orders
+    const ordersChannel = supabase
+      .channel(`workstation_orders_${user.id}`)
+      .on("postgres_changes", {
+        event: "*", schema: "public",
+        table: "orders",
+      }, fetchProductOrders)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(bookingsChannel);
+      supabase.removeChannel(ordersChannel);
+    };
   }, [user]);
 
   const fetchAll = async () => {
@@ -63,45 +83,35 @@ export default function SellerWorkstation() {
       fetchLiveStatus(),
       fetchProducts(),
       fetchBookings(),
+      fetchProductOrders(),
     ]);
     setLoading(false);
   };
 
-  // ================= CATEGORY =================
   const fetchWorkerCategory = async () => {
     try {
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       if (!currentUser) return;
-
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from("workers")
         .select("category, category_group")
         .eq("id", currentUser.id)
         .maybeSingle();
-
-      if (error) {
-        console.error("Category fetch error:", error.message);
-        return;
-      }
-
       setWorkerCategory(data?.category || null);
     } catch (err) {
       console.error("fetchWorkerCategory failed:", err.message);
     }
   };
 
-  // ================= LIVE STATUS =================
   const fetchLiveStatus = async () => {
     try {
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       if (!currentUser) return;
-
       const { data } = await supabase
         .from("live_workers")
         .select("id, service")
         .eq("worker_id", currentUser.id)
         .maybeSingle();
-
       if (data) {
         setIsLive(true);
         setService(data.service || "");
@@ -113,7 +123,6 @@ export default function SellerWorkstation() {
     }
   };
 
-  // ================= CATEGORY RESOLVER =================
   const resolveCategory = (fallbackService = "") => {
     return (
       workerCategory?.trim() ||
@@ -123,15 +132,12 @@ export default function SellerWorkstation() {
     );
   };
 
-  // ================= TOGGLE LIVE =================
   const toggleLive = async () => {
     setLiveLoading(true);
     try {
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       if (!currentUser) throw new Error("Not authenticated");
-
       const finalService = resolveCategory(service);
-
       if (isLive) {
         const { error } = await supabase
           .from("live_workers")
@@ -158,22 +164,80 @@ export default function SellerWorkstation() {
     }
   };
 
-  // ================= PRODUCTS =================
   const fetchProducts = async () => {
     try {
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       if (!currentUser) return;
-
       const { data } = await supabase
         .from("products")
         .select("id, title, category, price, image_url, created_at")
         .eq("worker_id", currentUser.id)
         .order("created_at", { ascending: false });
-
       setProducts(data || []);
     } catch (err) {
       console.error("fetchProducts failed:", err.message);
     }
+  };
+
+  // Fetch orders for worker's products
+  const fetchProductOrders = async () => {
+    try {
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser) return;
+
+      // Get all product IDs belonging to this worker
+      const { data: workerProducts } = await supabase
+        .from("products")
+        .select("id")
+        .eq("worker_id", currentUser.id);
+
+      if (!workerProducts || workerProducts.length === 0) {
+        setProductOrders([]);
+        return;
+      }
+
+      const productIds = workerProducts.map(p => p.id);
+
+      // Get orders for those products
+      const { data: ordersData, error } = await supabase
+        .from("orders")
+        .select("id, product_name, product_image_url, status, created_at, user_id, quantity, total_amount")
+        .in("product_id", productIds)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      // Get buyer names
+      const buyerIds = [...new Set((ordersData || []).map(o => o.user_id).filter(Boolean))];
+      let buyerMap = {};
+      if (buyerIds.length > 0) {
+        const { data: buyersData } = await supabase
+          .from("profiles")
+          .select("id, full_name")
+          .in("id", buyerIds);
+        (buyersData || []).forEach(b => {
+          buyerMap[b.id] = b.full_name;
+        });
+      }
+
+      const merged = (ordersData || []).map(o => ({
+        ...o,
+        buyer_name: buyerMap[o.user_id] || "Customer",
+      }));
+
+      setProductOrders(merged);
+    } catch (err) {
+      console.error("fetchProductOrders failed:", err.message);
+    }
+  };
+
+  const updateOrderStatus = async (orderId, status) => {
+    const { error } = await supabase
+      .from("orders")
+      .update({ status })
+      .eq("id", orderId);
+    if (error) alert("Failed to update: " + error.message);
+    else fetchProductOrders();
   };
 
   const uploadProduct = async () => {
@@ -182,7 +246,6 @@ export default function SellerWorkstation() {
     try {
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       if (!currentUser) throw new Error("Not authenticated");
-
       let imageUrl = null;
       if (form.file) {
         const ext = form.file.name.split(".").pop();
@@ -196,9 +259,7 @@ export default function SellerWorkstation() {
           .getPublicUrl(fileName);
         imageUrl = urlData.publicUrl;
       }
-
       const finalCategory = resolveCategory(service);
-
       const { error } = await supabase.from("products").insert({
         worker_id: currentUser.id,
         title: form.title,
@@ -208,7 +269,6 @@ export default function SellerWorkstation() {
         image_url: imageUrl,
       });
       if (error) throw error;
-
       setForm({ title: "", description: "", price: "", file: null });
       setShowUpload(false);
       fetchProducts();
@@ -233,19 +293,16 @@ export default function SellerWorkstation() {
     }
   };
 
-  // ================= BOOKINGS =================
   const fetchBookings = async () => {
     try {
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       if (!currentUser) return;
-
       const { data } = await supabase
         .from("hire_requests")
         .select("id, status, created_at, job_description, location, client_id")
         .eq("worker_id", currentUser.id)
         .order("created_at", { ascending: false })
         .limit(10);
-
       setBookings(data || []);
     } catch (err) {
       console.error("fetchBookings failed:", err.message);
@@ -261,7 +318,6 @@ export default function SellerWorkstation() {
     else fetchBookings();
   };
 
-  // ================= UI =================
   if (loading) return (
     <div className="min-h-screen bg-[#1A1A1A] flex items-center justify-center text-white">
       <div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
@@ -304,9 +360,7 @@ export default function SellerWorkstation() {
           disabled={isLive}
           className="w-full p-2 mb-3 bg-black/30 rounded text-white"
         >
-          <option value="">
-            Auto (Use Category: {workerCategory || "General"})
-          </option>
+          <option value="">Auto (Use Category: {workerCategory || "General"})</option>
           <option value="Cleaning">Cleaning</option>
           <option value="Plumbing">Plumbing</option>
           <option value="Electrical">Electrical</option>
@@ -318,7 +372,6 @@ export default function SellerWorkstation() {
           <option value="Painting">Painting</option>
           <option value="Welding">Welding</option>
         </select>
-
         <div className="flex items-center justify-between">
           <span className={isLive ? "text-green-400 font-semibold" : "text-gray-400"}>
             {isLive ? "🟢 You are Live" : "⚫ Offline"}
@@ -333,6 +386,66 @@ export default function SellerWorkstation() {
             )}
           </button>
         </div>
+      </div>
+
+      {/* PRODUCT ORDERS */}
+      <div className="bg-white/5 p-4 rounded-xl">
+        <h2 className="font-semibold mb-3">Product Orders</h2>
+        {productOrders.length === 0 ? (
+          <p className="text-gray-500 text-sm">No product orders yet.</p>
+        ) : (
+          productOrders.map((o) => (
+            <div key={o.id} className="py-3 border-b border-white/10">
+              <div className="flex justify-between items-start mb-2">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg overflow-hidden bg-white/10 flex items-center justify-center">
+                    {o.product_image_url ? (
+                      <img src={o.product_image_url} className="w-full h-full object-cover" alt={o.product_name} />
+                    ) : (
+                      <span>📦</span>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">{o.product_name}</p>
+                    <p className="text-xs text-gray-400">From: {o.buyer_name}</p>
+                    <p className="text-xs text-gray-500">{formatDate(o.created_at)}</p>
+                    {o.total_amount && (
+                      <p className="text-xs text-green-400">₦{Number(o.total_amount).toLocaleString()}</p>
+                    )}
+                  </div>
+                </div>
+                <span className={`text-xs px-2 py-1 rounded-full ${ORDER_STATUS_COLOR[o.status] || ORDER_STATUS_COLOR.pending}`}>
+                  {o.status || "pending"}
+                </span>
+              </div>
+
+              {/* Update order status */}
+              <div className="flex gap-2 mt-2 flex-wrap">
+                {["shipping", "on the way", "arriving", "delivered"].map(s => (
+                  <button
+                    key={s}
+                    onClick={() => updateOrderStatus(o.id, s)}
+                    className={`text-xs px-2 py-1 rounded-lg transition ${
+                      o.status === s
+                        ? "bg-green-600 text-white"
+                        : "bg-white/10 hover:bg-white/20 text-gray-300"
+                    }`}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+
+              {/* Message buyer */}
+              <button
+                onClick={() => navigate(`/inbox?user=${o.user_id}`)}
+                className="w-full mt-2 bg-white/10 hover:bg-white/20 py-1.5 rounded-lg text-xs transition"
+              >
+                💬 Message Customer
+              </button>
+            </div>
+          ))
+        )}
       </div>
 
       {/* PRODUCTS */}
@@ -367,9 +480,7 @@ export default function SellerWorkstation() {
               onChange={(e) => setForm({ ...form, description: e.target.value })}
             />
             <div>
-              <label className="text-xs text-gray-400 block mb-1">
-                Product Image
-              </label>
+              <label className="text-xs text-gray-400 block mb-1">Product Image</label>
               <input
                 type="file"
                 accept="image/*"
@@ -377,9 +488,7 @@ export default function SellerWorkstation() {
                 onChange={(e) => setForm({ ...form, file: e.target.files[0] })}
               />
             </div>
-            <p className="text-xs text-gray-500">
-              Category: {resolveCategory(service)}
-            </p>
+            <p className="text-xs text-gray-500">Category: {resolveCategory(service)}</p>
             <div className="flex gap-2">
               <button
                 onClick={uploadProduct}
@@ -402,33 +511,21 @@ export default function SellerWorkstation() {
           <p className="text-gray-500 text-sm">No products yet.</p>
         ) : (
           products.map((p) => (
-            <div
-              key={p.id}
-              className="flex justify-between items-center py-2 border-b border-white/10"
-            >
+            <div key={p.id} className="flex justify-between items-center py-2 border-b border-white/10">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full overflow-hidden bg-white/10 flex items-center justify-center">
                   {p.image_url ? (
-                    <img
-                      src={p.image_url}
-                      alt={p.title}
-                      className="w-full h-full object-cover"
-                    />
+                    <img src={p.image_url} alt={p.title} className="w-full h-full object-cover" />
                   ) : (
                     <span>📦</span>
                   )}
                 </div>
                 <div>
                   <p className="text-sm font-medium">{p.title}</p>
-                  <p className="text-xs text-gray-400">
-                    {p.category} • ₦{Number(p.price).toLocaleString()}
-                  </p>
+                  <p className="text-xs text-gray-400">{p.category} • ₦{Number(p.price).toLocaleString()}</p>
                 </div>
               </div>
-              <button
-                onClick={() => deleteProduct(p)}
-                className="text-red-400 hover:text-red-300"
-              >
+              <button onClick={() => deleteProduct(p)} className="text-red-400 hover:text-red-300">
                 <FaTrash size={12} />
               </button>
             </div>
@@ -436,10 +533,9 @@ export default function SellerWorkstation() {
         )}
       </div>
 
-      {/* BOOKINGS */}
+      {/* HIRE REQUESTS */}
       <div className="bg-white/5 p-4 rounded-xl">
         <h2 className="font-semibold mb-3">Hire Requests</h2>
-
         {bookings.length === 0 ? (
           <p className="text-gray-500 text-sm">No hire requests yet.</p>
         ) : (
@@ -447,19 +543,11 @@ export default function SellerWorkstation() {
             <div key={b.id} className="py-3 border-b border-white/10">
               <div className="flex justify-between items-start mb-2">
                 <div>
-                  <p className="text-sm font-medium">
-                    {b.job_description || "Job Request"}
-                  </p>
+                  <p className="text-sm font-medium">{b.job_description || "Job Request"}</p>
                   <p className="text-xs text-gray-500">📍 {b.location}</p>
-                  <p className="text-xs text-gray-500">
-                    {formatDate(b.created_at)}
-                  </p>
+                  <p className="text-xs text-gray-500">{formatDate(b.created_at)}</p>
                 </div>
-                <span
-                  className={`text-xs px-2 py-1 rounded-full ${
-                    BOOKING_STATUS_COLOR[b.status] || BOOKING_STATUS_COLOR.pending
-                  }`}
-                >
+                <span className={`text-xs px-2 py-1 rounded-full ${BOOKING_STATUS_COLOR[b.status] || BOOKING_STATUS_COLOR.pending}`}>
                   {b.status || "pending"}
                 </span>
               </div>
@@ -483,7 +571,7 @@ export default function SellerWorkstation() {
 
               {b.status === "accepted" && (
                 <button
-                  onClick={() => navigate("/inbox")}
+                  onClick={() => navigate(`/inbox?user=${b.client_id}`)}
                   className="w-full mt-2 bg-white/10 hover:bg-white/20 py-1.5 rounded-lg text-xs transition"
                 >
                   💬 Message Client

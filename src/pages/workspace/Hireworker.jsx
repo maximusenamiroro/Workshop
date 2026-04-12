@@ -9,6 +9,7 @@ export default function HireWorker() {
   const { user } = useAuth();
 
   const [worker, setWorker] = useState(null);
+  const [liveWorkers, setLiveWorkers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [job, setJob] = useState("");
@@ -17,60 +18,58 @@ export default function HireWorker() {
 
   useEffect(() => {
     fetchWorkers();
-  }, []);
-
-  // If no id in URL, fetch all live workers to browse
-  const [liveWorkers, setLiveWorkers] = useState([]);
+  }, [id]);
 
   const fetchWorkers = async () => {
-  try {
-    setLoading(true);
+    try {
+      setLoading(true);
+      setError(null);
 
-    if (id) {
-      // Try workers table first
-      const { data: workerData } = await supabase
-        .from("workers")
-        .select("id, category, location, profiles(full_name)")
-        .eq("id", id)
-        .maybeSingle(); // Use maybeSingle instead of single
-
-      if (workerData) {
-        setWorker(workerData);
-      } else {
-        // Fallback - get from live_workers
-        const { data: liveData } = await supabase
-          .from("live_workers")
-          .select("id, service, worker_id, profiles(full_name)")
-          .eq("worker_id", id)
+      if (id) {
+        // Try workers table first
+        const { data: workerData } = await supabase
+          .from("workers")
+          .select("id, category, location, profiles(full_name)")
+          .eq("id", id)
           .maybeSingle();
 
-        if (liveData) {
-          setWorker({
-            id: liveData.worker_id,
-            category: liveData.service,
-            profiles: liveData.profiles,
-          });
+        if (workerData) {
+          setWorker(workerData);
         } else {
-          setError("Worker not found");
-        }
-      }
-    } else {
-      // Fetch all live workers
-      const { data, error: fetchError } = await supabase
-        .from("live_workers")
-        .select("id, service, worker_id, profiles(full_name)")
-        .limit(20);
+          // Fallback from live_workers
+          const { data: liveData } = await supabase
+            .from("live_workers")
+            .select("id, service, worker_id, profiles(full_name)")
+            .eq("worker_id", id)
+            .maybeSingle();
 
-      if (fetchError) throw fetchError;
-      setLiveWorkers(data || []);
+          if (liveData) {
+            setWorker({
+              id: liveData.worker_id,
+              category: liveData.service,
+              profiles: liveData.profiles,
+            });
+          } else {
+            setError("Worker not found");
+          }
+        }
+      } else {
+        // Fetch all live workers to browse
+        const { data, error: fetchError } = await supabase
+          .from("live_workers")
+          .select("id, service, worker_id, profiles(full_name)")
+          .limit(50);
+
+        if (fetchError) throw fetchError;
+        setLiveWorkers(data || []);
+      }
+    } catch (err) {
+      console.error(err);
+      setError("Failed to load workers");
+    } finally {
+      setLoading(false);
     }
-  } catch (err) {
-    console.error(err);
-    setError("Failed to load workers");
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   const handleHire = async () => {
     if (!job.trim() || !location.trim()) {
@@ -83,6 +82,11 @@ export default function HireWorker() {
       return;
     }
 
+    if (!worker?.id) {
+      alert("Worker not found");
+      return;
+    }
+
     try {
       setSubmitting(true);
       setError(null);
@@ -90,8 +94,8 @@ export default function HireWorker() {
       const { error: insertError } = await supabase
         .from("hire_requests")
         .insert({
-          client_id: user.id,
-          worker_id: worker?.id || null,
+          client_id: user.id,       // ← client who is hiring
+          worker_id: worker.id,     // ← worker being hired
           job_description: job.trim(),
           location: location.trim(),
           status: "pending",
@@ -109,18 +113,16 @@ export default function HireWorker() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#0B0F19] text-white flex items-center justify-center">
-        <p>Loading...</p>
-      </div>
-    );
-  }
+  if (loading) return (
+    <div className="min-h-screen bg-[#0B0F19] text-white flex items-center justify-center">
+      <div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
 
   // ===== BROWSE ALL LIVE WORKERS =====
   if (!id) {
     return (
-      <div className="min-h-screen bg-[#0B0F19] text-white p-4">
+      <div className="min-h-screen bg-[#0B0F19] text-white p-4 pb-24">
         <h1 className="text-2xl font-bold mb-6">Live Workers</h1>
 
         {liveWorkers.length === 0 ? (
@@ -157,7 +159,7 @@ export default function HireWorker() {
     );
   }
 
-  // ===== HIRE SPECIFIC WORKER =====
+  // ===== ERROR STATE =====
   if (error || !worker) {
     return (
       <div className="min-h-screen bg-[#0B0F19] text-white flex items-center justify-center">
@@ -174,8 +176,9 @@ export default function HireWorker() {
     );
   }
 
+  // ===== HIRE SPECIFIC WORKER =====
   return (
-    <div className="min-h-screen bg-[#0B0F19] p-4 text-white">
+    <div className="min-h-screen bg-[#0B0F19] p-4 text-white pb-24">
       <button
         onClick={() => navigate(-1)}
         className="text-gray-400 hover:text-white mb-4 text-sm"
@@ -196,7 +199,7 @@ export default function HireWorker() {
             <h2 className="font-bold text-lg">
               {worker.profiles?.full_name || "Worker"}
             </h2>
-            <p className="text-gray-400">{worker.category}</p>
+            <p className="text-gray-400">{worker.category || "General Worker"}</p>
             <p className="text-green-400 text-sm">🟢 Available</p>
           </div>
         </div>
