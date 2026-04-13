@@ -339,9 +339,9 @@ export default function BuyerWorkspace() {
               </div>
               <button
                 onClick={() => navigate(`/hire-worker/${w.worker_id}`)}
-                className="text-xs bg-green-600 hover:bg-green-700 px-3 py-1 rounded transition"
+                className="text-xs bg-green-600 hover:bg-green-700 px-3 py-1 rounded-full transition"
               >
-                Hire
+               Book
               </button>
             </div>
           ))
@@ -362,7 +362,7 @@ export default function BuyerWorkspace() {
               </div>
               <button
                 onClick={() => navigate(`/hire-worker/${w.worker_id}`)}
-                className="text-xs bg-green-600 hover:bg-green-700 px-3 py-1 rounded transition"
+                className="text-xs bg-green-600 hover:bg-green-700 px-3 py-1 rounded-full transition"
               >
                 Hire
               </button>
