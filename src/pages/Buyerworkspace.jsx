@@ -1,78 +1,49 @@
 import { useState, useEffect, useMemo } from "react";
-import { useSwipeable } from "react-swipeable";
-import { FaBell, FaSearch, FaClipboardList, FaTimes } from "react-icons/fa";
+import { FaBell, FaSearch, FaClipboardList } from "react-icons/fa";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 
-const ORDER_STATUS_COLOR = {
-  delivered: "text-green-400",
-  arriving: "text-yellow-400",
-  "on the way": "text-blue-400",
-  shipping: "text-gray-400",
-};
-
-const formatCountdown = (ms) => {
-  if (ms <= 0) return "Expired";
-  const hrs = Math.floor(ms / 1000 / 60 / 60);
-  const mins = Math.floor((ms / 1000 / 60) % 60);
-  const secs = Math.floor((ms / 1000) % 60);
-  return `${hrs}h ${mins}m ${secs}s`;
-};
-
-const CircularProgress = ({ progress }) => {
-  const stroke = 4;
-  const radius = 28;
-  const normalizedRadius = radius - stroke * 2;
-  const circumference = normalizedRadius * 2 * Math.PI;
-  const strokeDashoffset = circumference - (progress / 100) * circumference;
-
-  return (
-    <svg height={radius * 2} width={radius * 2}>
-      <circle stroke="#ffffff20" fill="transparent" strokeWidth={stroke} r={normalizedRadius} cx={radius} cy={radius} />
-      <circle
-        stroke="#22c55e"
-        fill="transparent"
-        strokeWidth={stroke}
-        strokeDasharray={`${circumference} ${circumference}`}
-        style={{ strokeDashoffset, transition: "stroke-dashoffset 0.5s linear" }}
-        r={normalizedRadius}
-        cx={radius}
-        cy={radius}
-      />
-    </svg>
-  );
+const CATEGORY_EMOJI = {
+  "Fashion": "👗",
+  "Shoes": "👟",
+  "Watches": "⌚",
+  "Electronics": "📱",
+  "Home Appliances": "🏠",
+  "Food & Drinks": "🍔",
+  "Beauty": "💄",
+  "Tools": "🛠️",
+  "Furniture": "🛋️",
+  "Sports": "⚽",
+  "Books": "📚",
+  "Toys": "🧸",
+  "Health": "💊",
+  "Others": "📦",
+  "Cleaning": "🧹",
+  "Driving": "🚗",
+  "Plumbing": "🔧",
+  "Electrical": "⚡",
+  "Carpentry": "🪚",
+  "Security": "🔒",
+  "Delivery": "📦",
+  "Tailoring": "🧵",
+  "Painting": "🎨",
+  "Welding": "🔥",
 };
 
 export default function BuyerWorkspace() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const [orders, setOrders] = useState([]);
   const [bookings, setBookings] = useState([]);
-  const [categorizedWorkers, setCategorizedWorkers] = useState([]);
-  const [generalWorkers, setGeneralWorkers] = useState([]);
+  const [productCategories, setProductCategories] = useState([]);
+  const [workerCategories, setWorkerCategories] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [now, setNow] = useState(new Date());
-  const [storyIndex, setStoryIndex] = useState(null);
   const [search, setSearch] = useState("");
-
-  useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   useEffect(() => {
     if (!user) return;
     fetchAll();
-
-    const ordersChannel = supabase
-      .channel(`orders_${user.id}`)
-      .on("postgres_changes", {
-        event: "*", schema: "public", table: "orders",
-        filter: `user_id=eq.${user.id}`,
-      }, fetchOrders)
-      .subscribe();
 
     const bookingsChannel = supabase
       .channel(`bookings_${user.id}`)
@@ -86,39 +57,70 @@ export default function BuyerWorkspace() {
       .channel("live_workers_global")
       .on("postgres_changes", {
         event: "*", schema: "public", table: "live_workers",
-      }, fetchLiveWorkers)
+      }, fetchWorkerCategories)
       .subscribe();
 
     return () => {
-      supabase.removeChannel(ordersChannel);
       supabase.removeChannel(bookingsChannel);
       supabase.removeChannel(liveChannel);
     };
   }, [user]);
 
   const fetchAll = async () => {
-    await Promise.all([fetchOrders(), fetchBookings(), fetchLiveWorkers()]);
+    await Promise.all([
+      fetchBookings(),
+      fetchProductCategories(),
+      fetchWorkerCategories(),
+    ]);
     setLoading(false);
   };
 
-  const fetchOrders = async () => {
+  // Fetch only categories that have products
+  const fetchProductCategories = async () => {
     try {
-      const { data: { user: currentUser } } = await supabase.auth.getUser();
-      if (!currentUser) return;
-
       const { data, error } = await supabase
-        .from("orders")
-        .select("id, product_name, status, created_at, product_image_url")
-        .eq("user_id", currentUser.id)
-        .order("created_at", { ascending: false });
+        .from("products")
+        .select("category");
 
-      if (error) console.error("Orders error:", error.message);
-      setOrders((data || []).map((o) => ({
-        ...o,
-        expiresAt: new Date(new Date(o.created_at).getTime() + 24 * 60 * 60 * 1000),
-      })));
+      if (error) throw error;
+
+      // Get unique categories that have products
+      const unique = [...new Set((data || []).map(p => p.category).filter(Boolean))];
+      setProductCategories(unique);
     } catch (err) {
-      console.error("fetchOrders failed:", err.message);
+      console.error("fetchProductCategories failed:", err.message);
+    }
+  };
+
+  // Fetch only categories with live workers
+  const fetchWorkerCategories = async () => {
+    try {
+      // Get all live worker IDs
+      const { data: liveData, error } = await supabase
+        .from("live_workers")
+        .select("worker_id");
+
+      if (error) throw error;
+      if (!liveData || liveData.length === 0) {
+        setWorkerCategories([]);
+        return;
+      }
+
+      const workerIds = liveData.map(w => w.worker_id);
+
+      // Get their categories from workers table
+      const { data: workersData } = await supabase
+        .from("workers")
+        .select("category")
+        .in("id", workerIds);
+
+      const unique = [...new Set(
+        (workersData || []).map(w => w.category).filter(Boolean)
+      )];
+
+      setWorkerCategories(unique);
+    } catch (err) {
+      console.error("fetchWorkerCategories failed:", err.message);
     }
   };
 
@@ -134,86 +136,12 @@ export default function BuyerWorkspace() {
         .order("created_at", { ascending: false })
         .limit(10);
 
-      if (error) console.error("Bookings error:", error.message);
+      if (error) throw error;
       setBookings(data || []);
     } catch (err) {
       console.error("fetchBookings failed:", err.message);
     }
   };
-
-  const fetchLiveWorkers = async () => {
-    try {
-      // Fetch live_workers with profiles join
-      const { data, error } = await supabase
-        .from("live_workers")
-        .select("id, service, worker_id, profiles(full_name)")
-        .limit(50);
-
-      if (error) throw error;
-
-      // Separately fetch worker categories
-      const workerIds = (data || []).map(w => w.worker_id);
-
-      let workerCategories = {};
-      if (workerIds.length > 0) {
-        const { data: workersData } = await supabase
-          .from("workers")
-          .select("id, category")
-          .in("id", workerIds);
-
-        (workersData || []).forEach(w => {
-          workerCategories[w.id] = w.category;
-        });
-      }
-
-      // Merge category into live worker data
-      const merged = (data || []).map(w => ({
-        ...w,
-        category: workerCategories[w.worker_id] || null,
-      }));
-
-      setCategorizedWorkers(merged.filter(w => w.category));
-      setGeneralWorkers(merged.filter(w => !w.category));
-    } catch (err) {
-      console.error("fetchLiveWorkers failed:", err.message);
-      setCategorizedWorkers([]);
-      setGeneralWorkers([]);
-    }
-  };
-
-  const filteredWorkers = useMemo(() => ({
-    categorized: categorizedWorkers.filter((w) =>
-      ((w.profiles?.full_name || "") + (w.category || ""))
-        .toLowerCase().includes(search.toLowerCase())
-    ),
-    general: generalWorkers.filter((w) =>
-      ((w.profiles?.full_name || "") + (w.service || ""))
-        .toLowerCase().includes(search.toLowerCase())
-    ),
-  }), [search, categorizedWorkers, generalWorkers]);
-
-  const formattedOrders = useMemo(() =>
-    orders.map((o) => {
-      const remaining = o.expiresAt - now;
-      return {
-        ...o,
-        color: ORDER_STATUS_COLOR[o.status?.toLowerCase()] || "text-gray-400",
-        countdown: remaining > 0 ? remaining : 0,
-        progress: remaining > 0 ? (remaining / (24 * 60 * 60 * 1000)) * 100 : 0,
-      };
-    }), [orders, now]);
-
-  const handlers = useSwipeable({
-    onSwipedLeft: () => {
-      if (storyIndex !== null && storyIndex < formattedOrders.length - 1)
-        setStoryIndex(storyIndex + 1);
-    },
-    onSwipedRight: () => {
-      if (storyIndex !== null && storyIndex > 0)
-        setStoryIndex(storyIndex - 1);
-    },
-    trackMouse: true,
-  });
 
   const getBookingColor = (status) => {
     switch (status) {
@@ -222,6 +150,16 @@ export default function BuyerWorkspace() {
       default: return "bg-yellow-500/20 text-yellow-400";
     }
   };
+
+  const filteredWorkerCategories = useMemo(() =>
+    workerCategories.filter(c =>
+      c.toLowerCase().includes(search.toLowerCase())
+    ), [workerCategories, search]);
+
+  const filteredProductCategories = useMemo(() =>
+    productCategories.filter(c =>
+      c.toLowerCase().includes(search.toLowerCase())
+    ), [productCategories, search]);
 
   if (loading) return (
     <div className="min-h-screen bg-[#0f0f0f] flex items-center justify-center text-white">
@@ -234,70 +172,76 @@ export default function BuyerWorkspace() {
 
       {/* HEADER */}
       <div className="flex justify-between items-center mb-6">
-        <FaClipboardList className="cursor-pointer" onClick={() => navigate("/productorder")} />
+        <FaClipboardList
+          className="cursor-pointer text-white/70"
+          onClick={() => navigate("/productorder")}
+        />
         <h1 className="text-xl font-semibold">Workspace</h1>
-        <FaBell />
+        <FaBell className="text-white/70" />
       </div>
 
       {/* SEARCH */}
-      <div className="flex items-center bg-white/5 p-2 rounded mb-4">
+      <div className="flex items-center bg-white/5 p-2 rounded-xl mb-6">
         <FaSearch className="mr-2 text-white/50" />
         <input
-          className="bg-transparent w-full outline-none text-white placeholder-gray-500"
-          placeholder="Search workers, bookings..."
+          className="bg-transparent w-full outline-none text-white placeholder-gray-500 text-sm"
+          placeholder="Search categories or workers..."
           onChange={(e) => setSearch(e.target.value)}
         />
       </div>
 
-      {/* ORDERS */}
+      {/* PRODUCT CATEGORIES */}
       <div className="mb-6">
-        <div className="flex justify-between items-center mb-2">
-          <h2 className="font-semibold">Product Orders</h2>
-          <button onClick={() => navigate("/shop")} className="text-xs text-green-400">Shop →</button>
+        <div className="flex justify-between items-center mb-3">
+          <h2 className="font-semibold">Shop by Category</h2>
+          <button
+            onClick={() => navigate("/shop")}
+            className="text-xs text-green-400"
+          >
+            See All →
+          </button>
         </div>
-        {formattedOrders.length === 0 ? (
+
+        {filteredProductCategories.length === 0 ? (
           <div className="bg-white/5 rounded-xl p-4 text-center">
-            <p className="text-sm text-gray-400 mb-2">No orders yet</p>
+            <p className="text-sm text-gray-400 mb-2">No products available yet</p>
             <button
               onClick={() => navigate("/shop")}
               className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-xl text-sm font-semibold transition"
             >
-              Browse Products
+              Browse Shop
             </button>
           </div>
         ) : (
           <div className="flex gap-4 overflow-x-auto pb-2">
-            {formattedOrders.map((order, idx) => (
-              <div
-                key={order.id}
-                onClick={() => setStoryIndex(idx)}
-                className="min-w-[80px] text-center cursor-pointer flex flex-col items-center"
+            {filteredProductCategories.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => navigate(`/shop?category=${encodeURIComponent(cat)}`)}
+                className="flex flex-col items-center min-w-[80px] cursor-pointer"
               >
-                <div className="relative w-14 h-14">
-                  <CircularProgress progress={order.progress} />
-                  <div className="absolute top-0 left-0 w-full h-full flex items-center justify-center">
-                    {order.product_image_url ? (
-                      <img src={order.product_image_url} className="w-10 h-10 rounded-full object-cover" alt={order.product_name} />
-                    ) : (
-                      <span className="text-xl">📦</span>
-                    )}
-                  </div>
+                <div className="w-16 h-16 rounded-full bg-white/10 border-2 border-green-500/50 flex items-center justify-center text-3xl hover:border-green-500 transition">
+                  {CATEGORY_EMOJI[cat] || "📦"}
                 </div>
-                <p className="text-xs mt-1 truncate w-20">{order.product_name}</p>
-                <p className={`text-xs ${order.color}`}>{order.status || "pending"}</p>
-                <p className="text-xs text-gray-500">{formatCountdown(order.countdown)}</p>
-              </div>
+                <p className="text-xs mt-2 text-center text-gray-300 truncate w-20">{cat}</p>
+              </button>
             ))}
           </div>
         )}
       </div>
 
-      {/* BOOKINGS */}
+      {/* MY BOOKINGS */}
       <div className="bg-white/5 p-4 rounded-xl mb-6">
-        <div className="flex justify-between items-center mb-2">
+        <div className="flex justify-between items-center mb-3">
           <h2 className="font-semibold">My Bookings</h2>
-          <button onClick={() => navigate("/hire-worker")} className="text-xs text-green-400">+ Hire</button>
+          <button
+            onClick={() => navigate("/hire-worker")}
+            className="text-xs text-green-400"
+          >
+            + Hire
+          </button>
         </div>
+
         {bookings.length === 0 ? (
           <div className="space-y-2">
             <p className="text-sm text-gray-400">No bookings yet</p>
@@ -325,85 +269,39 @@ export default function BuyerWorkspace() {
         )}
       </div>
 
-      {/* SPECIALIZED WORKERS */}
-      <div className="bg-white/5 p-4 rounded-xl mb-4">
-        <h2 className="font-semibold mb-2">Specialized Workers</h2>
-        {filteredWorkers.categorized.length === 0 ? (
-          <p className="text-sm text-gray-400">No specialized workers live</p>
-        ) : (
-          filteredWorkers.categorized.map((w) => (
-            <div key={w.id} className="flex justify-between py-2 border-b border-white/10">
-              <div>
-                <p className="text-sm">{w.profiles?.full_name || "Worker"}</p>
-                <p className="text-xs text-green-400">{w.category}</p>
-              </div>
-              <button
-                onClick={() => navigate(`/hire-worker/${w.worker_id}`)}
-                className="text-xs bg-green-600 hover:bg-green-700 px-3 py-1 rounded-full transition"
-              >
-               Book
-              </button>
-            </div>
-          ))
-        )}
-      </div>
+      {/* SPECIALIZED WORKER CATEGORIES */}
+      <div className="mb-6">
+        <div className="flex justify-between items-center mb-3">
+          <h2 className="font-semibold">Hire by Specialty</h2>
+          <button
+            onClick={() => navigate("/hire-worker")}
+            className="text-xs text-green-400"
+          >
+            See All →
+          </button>
+        </div>
 
-      {/* GENERAL WORKERS */}
-      <div className="bg-white/5 p-4 rounded-xl mb-6">
-        <h2 className="font-semibold mb-2">General Workers</h2>
-        {filteredWorkers.general.length === 0 ? (
-          <p className="text-sm text-gray-400">No general workers live</p>
-        ) : (
-          filteredWorkers.general.map((w) => (
-            <div key={w.id} className="flex justify-between py-2 border-b border-white/10">
-              <div>
-                <p className="text-sm">{w.profiles?.full_name || "Worker"}</p>
-                <p className="text-xs text-yellow-400">{w.service}</p>
-              </div>
-              <button
-                onClick={() => navigate(`/hire-worker/${w.worker_id}`)}
-                className="text-xs bg-green-600 hover:bg-green-700 px-3 py-1 rounded-full transition"
-              >
-                Hire
-              </button>
-            </div>
-          ))
-        )}
-      </div>
-
-      {/* STORY MODAL */}
-      {storyIndex !== null && formattedOrders[storyIndex] && (
-        <div {...handlers} className="fixed inset-0 bg-black z-50 p-4 flex flex-col">
-          <div className="flex justify-between mb-3 items-center">
-            <FaTimes className="cursor-pointer text-white" onClick={() => setStoryIndex(null)} />
-            <span className="font-semibold">{formattedOrders[storyIndex]?.product_name}</span>
-            <div className="w-4" />
+        {filteredWorkerCategories.length === 0 ? (
+          <div className="bg-white/5 rounded-xl p-4 text-center">
+            <p className="text-sm text-gray-400">No specialized workers live right now</p>
           </div>
-
-          <div className="flex gap-1 mb-4">
-            {formattedOrders.map((_, idx) => (
-              <div key={idx} className={`h-1 flex-1 rounded-full ${idx === storyIndex ? "bg-white" : "bg-white/30"}`} />
+        ) : (
+          <div className="flex gap-4 overflow-x-auto pb-2">
+            {filteredWorkerCategories.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => navigate(`/hire-worker?category=${encodeURIComponent(cat)}`)}
+                className="flex flex-col items-center min-w-[80px] cursor-pointer"
+              >
+                <div className="w-16 h-16 rounded-full bg-white/10 border-2 border-yellow-500/50 flex items-center justify-center text-3xl hover:border-yellow-500 transition">
+                  {CATEGORY_EMOJI[cat] || "👷"}
+                </div>
+                <p className="text-xs mt-2 text-center text-gray-300 truncate w-20">{cat}</p>
+              </button>
             ))}
           </div>
-
-          <div className="flex-1 flex flex-col items-center justify-center gap-4">
-            <div className="w-24 h-24 rounded-full overflow-hidden bg-white/10 flex items-center justify-center">
-              {formattedOrders[storyIndex]?.product_image_url ? (
-                <img src={formattedOrders[storyIndex].product_image_url} className="w-full h-full object-cover" alt="product" />
-              ) : (
-                <span className="text-5xl">📦</span>
-              )}
-            </div>
-            <p className="text-xl font-bold">{formattedOrders[storyIndex]?.product_name}</p>
-            <p className={`text-lg font-semibold ${formattedOrders[storyIndex]?.color}`}>
-              {formattedOrders[storyIndex]?.status || "pending"}
-            </p>
-            <p className="text-gray-400 text-sm">
-              Expires in: {formatCountdown(formattedOrders[storyIndex]?.countdown)}
-            </p>
-          </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

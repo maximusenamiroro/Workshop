@@ -1,4 +1,4 @@
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { useAuth } from "../../context/AuthContext";
@@ -6,19 +6,23 @@ import { useAuth } from "../../context/AuthContext";
 export default function HireWorker() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
+
+  const params = new URLSearchParams(location.search);
+  const categoryFilter = params.get("category");
 
   const [worker, setWorker] = useState(null);
   const [liveWorkers, setLiveWorkers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [job, setJob] = useState("");
-  const [location, setLocation] = useState("");
+  const [workerLocation, setWorkerLocation] = useState("");
   const [error, setError] = useState(null);
 
   useEffect(() => {
     fetchWorkers();
-  }, [id]);
+  }, [id, categoryFilter]);
 
   const fetchWorkers = async () => {
     try {
@@ -26,7 +30,7 @@ export default function HireWorker() {
       setError(null);
 
       if (id) {
-        // Try workers table first
+        // Hire specific worker
         const { data: workerData } = await supabase
           .from("workers")
           .select("id, category, location, profiles(full_name)")
@@ -36,7 +40,6 @@ export default function HireWorker() {
         if (workerData) {
           setWorker(workerData);
         } else {
-          // Fallback from live_workers
           const { data: liveData } = await supabase
             .from("live_workers")
             .select("id, service, worker_id, profiles(full_name)")
@@ -54,14 +57,44 @@ export default function HireWorker() {
           }
         }
       } else {
-        // Fetch all live workers to browse
-        const { data, error: fetchError } = await supabase
+        // Browse live workers — filter by category if provided
+        const { data: liveData, error: liveError } = await supabase
           .from("live_workers")
           .select("id, service, worker_id, profiles(full_name)")
           .limit(50);
 
-        if (fetchError) throw fetchError;
-        setLiveWorkers(data || []);
+        if (liveError) throw liveError;
+
+        const allLive = liveData || [];
+        const liveWorkerIds = allLive.map(w => w.worker_id);
+
+        // Get worker categories
+        let workerCategoryMap = {};
+        if (liveWorkerIds.length > 0) {
+          const { data: workersData } = await supabase
+            .from("workers")
+            .select("id, category")
+            .in("id", liveWorkerIds);
+
+          (workersData || []).forEach(w => {
+            workerCategoryMap[w.id] = w.category;
+          });
+        }
+
+        // Merge category into live workers
+        const merged = allLive.map(w => ({
+          ...w,
+          workerCategory: workerCategoryMap[w.worker_id] || w.service || "General",
+        }));
+
+        // Filter by category if provided
+        const filtered = categoryFilter
+          ? merged.filter(w =>
+              w.workerCategory?.toLowerCase() === categoryFilter.toLowerCase()
+            )
+          : merged;
+
+        setLiveWorkers(filtered);
       }
     } catch (err) {
       console.error(err);
@@ -72,16 +105,14 @@ export default function HireWorker() {
   };
 
   const handleHire = async () => {
-    if (!job.trim() || !location.trim()) {
+    if (!job.trim() || !workerLocation.trim()) {
       alert("Please fill in both job description and location");
       return;
     }
-
     if (!user) {
       navigate("/login");
       return;
     }
-
     if (!worker?.id) {
       alert("Worker not found");
       return;
@@ -94,10 +125,10 @@ export default function HireWorker() {
       const { error: insertError } = await supabase
         .from("hire_requests")
         .insert({
-          client_id: user.id,       // ← client who is hiring
-          worker_id: worker.id,     // ← worker being hired
+          client_id: user.id,
+          worker_id: worker.id,
           job_description: job.trim(),
-          location: location.trim(),
+          location: workerLocation.trim(),
           status: "pending",
         });
 
@@ -119,17 +150,32 @@ export default function HireWorker() {
     </div>
   );
 
-  // ===== BROWSE ALL LIVE WORKERS =====
+  // ===== BROWSE WORKERS (with optional category filter) =====
   if (!id) {
     return (
       <div className="min-h-screen bg-[#0B0F19] text-white p-4 pb-24">
-        <h1 className="text-2xl font-bold mb-6">Live Workers</h1>
+        <div className="flex items-center gap-3 mb-6">
+          <button onClick={() => navigate(-1)} className="text-gray-400 hover:text-white">
+            ← Back
+          </button>
+          <h1 className="text-2xl font-bold">
+            {categoryFilter ? `${categoryFilter} Workers` : "Live Workers"}
+          </h1>
+        </div>
 
         {liveWorkers.length === 0 ? (
           <div className="text-center text-gray-400 mt-20">
             <p className="text-4xl mb-4">😴</p>
-            <p>No workers are live right now.</p>
+            <p>No {categoryFilter || ""} workers are live right now.</p>
             <p className="text-sm mt-2">Check back soon!</p>
+            {categoryFilter && (
+              <button
+                onClick={() => navigate("/hire-worker")}
+                className="mt-4 text-green-400 underline text-sm"
+              >
+                View all live workers
+              </button>
+            )}
           </div>
         ) : (
           <div className="space-y-4">
@@ -138,12 +184,17 @@ export default function HireWorker() {
                 key={w.id}
                 className="bg-[#101623] p-4 rounded-xl flex justify-between items-center"
               >
-                <div>
-                  <p className="font-semibold">
-                    {w.profiles?.full_name || "Worker"}
-                  </p>
-                  <p className="text-sm text-gray-400">{w.service}</p>
-                  <p className="text-xs text-green-400 mt-1">🟢 Live now</p>
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-full bg-green-600 flex items-center justify-center font-bold text-lg">
+                    {w.profiles?.full_name?.[0] || "W"}
+                  </div>
+                  <div>
+                    <p className="font-semibold">
+                      {w.profiles?.full_name || "Worker"}
+                    </p>
+                    <p className="text-sm text-gray-400">{w.workerCategory}</p>
+                    <p className="text-xs text-green-400 mt-1">🟢 Live now</p>
+                  </div>
                 </div>
                 <button
                   onClick={() => navigate(`/hire-worker/${w.worker_id}`)}
@@ -189,7 +240,6 @@ export default function HireWorker() {
       <h1 className="text-2xl font-bold mb-6">Hire Worker</h1>
 
       <div className="bg-[#101623] p-6 rounded-xl space-y-6">
-
         {/* Worker Info */}
         <div className="flex items-center gap-4">
           <div className="w-16 h-16 rounded-full bg-green-600 flex items-center justify-center text-2xl font-bold">
@@ -223,8 +273,8 @@ export default function HireWorker() {
             Your Location
           </label>
           <input
-            value={location}
-            onChange={(e) => setLocation(e.target.value)}
+            value={workerLocation}
+            onChange={(e) => setWorkerLocation(e.target.value)}
             placeholder="e.g. Ikeja, Lagos"
             className="w-full p-4 bg-[#141B2D] rounded-xl border border-gray-700 focus:border-green-500 outline-none text-white"
           />

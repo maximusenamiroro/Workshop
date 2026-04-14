@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabaseClient";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 
 const CATEGORIES = [
   { label: "All", emoji: "🛍️" },
@@ -22,10 +22,23 @@ const CATEGORIES = [
 
 export default function ProductCatalogue() {
   const navigate = useNavigate();
-  const [activeCategory, setActiveCategory] = useState("All");
+  const location = useLocation();
+
+  // Read category from URL param
+  const params = new URLSearchParams(location.search);
+  const urlCategory = params.get("category");
+
+  const [activeCategory, setActiveCategory] = useState(urlCategory || "All");
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+
+  // Update active category when URL changes
+  useEffect(() => {
+    const p = new URLSearchParams(location.search);
+    const cat = p.get("category");
+    setActiveCategory(cat || "All");
+  }, [location.search]);
 
   useEffect(() => {
     fetchProducts();
@@ -34,7 +47,6 @@ export default function ProductCatalogue() {
   const fetchProducts = async () => {
     setLoading(true);
     try {
-      // Fetch products without profiles join — join separately
       let query = supabase
         .from("products")
         .select("id, title, category, price, image_url, description, worker_id")
@@ -51,8 +63,8 @@ export default function ProductCatalogue() {
 
       // Fetch seller names separately
       const workerIds = [...new Set(productsData.map(p => p.worker_id).filter(Boolean))];
-
       let profileMap = {};
+
       if (workerIds.length > 0) {
         const { data: profilesData } = await supabase
           .from("profiles")
@@ -64,7 +76,6 @@ export default function ProductCatalogue() {
         });
       }
 
-      // Merge seller name into products
       const merged = productsData.map(p => ({
         ...p,
         seller_name: profileMap[p.worker_id] || "Seller",
@@ -78,6 +89,15 @@ export default function ProductCatalogue() {
     }
   };
 
+  const handleCategoryClick = (label) => {
+    setActiveCategory(label);
+    if (label === "All") {
+      navigate("/shop");
+    } else {
+      navigate(`/shop?category=${encodeURIComponent(label)}`);
+    }
+  };
+
   const filtered = products.filter(p =>
     p.title?.toLowerCase().includes(search.toLowerCase())
   );
@@ -87,7 +107,9 @@ export default function ProductCatalogue() {
 
       {/* HEADER */}
       <div className="px-4 pt-6 pb-3">
-        <h1 className="text-xl font-bold mb-4">Shop</h1>
+        <h1 className="text-xl font-bold mb-4">
+          {activeCategory === "All" ? "Shop" : activeCategory}
+        </h1>
         <input
           type="text"
           placeholder="Search products..."
@@ -102,7 +124,7 @@ export default function ProductCatalogue() {
         {CATEGORIES.map((cat) => (
           <button
             key={cat.label}
-            onClick={() => setActiveCategory(cat.label)}
+            onClick={() => handleCategoryClick(cat.label)}
             className={`flex flex-col items-center min-w-[64px] py-2 px-3 rounded-2xl transition ${
               activeCategory === cat.label
                 ? "bg-green-600 text-white"
@@ -125,6 +147,12 @@ export default function ProductCatalogue() {
           <div className="text-center mt-20">
             <p className="text-4xl mb-3">😕</p>
             <p className="text-gray-400">No products found</p>
+            <button
+              onClick={() => navigate("/shop")}
+              className="mt-4 text-green-400 text-sm underline"
+            >
+              View all products
+            </button>
           </div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
