@@ -11,6 +11,7 @@ export default function HireWorker() {
 
   const params = new URLSearchParams(location.search);
   const categoryFilter = params.get("category");
+  const serviceFilter = params.get("service");   // ← Added for General Workers
 
   const [worker, setWorker] = useState(null);
   const [liveWorkers, setLiveWorkers] = useState([]);
@@ -22,7 +23,7 @@ export default function HireWorker() {
 
   useEffect(() => {
     fetchWorkers();
-  }, [id, categoryFilter]);
+  }, [id, categoryFilter, serviceFilter]);
 
   const fetchWorkers = async () => {
     try {
@@ -30,7 +31,7 @@ export default function HireWorker() {
       setError(null);
 
       if (id) {
-        // Hire specific worker
+        // View specific worker
         const { data: workerData } = await supabase
           .from("workers")
           .select("id, category, location, profiles(full_name)")
@@ -57,7 +58,7 @@ export default function HireWorker() {
           }
         }
       } else {
-        // Browse live workers — filter by category if provided
+        // Browse mode - filter by category OR service
         const { data: liveData, error: liveError } = await supabase
           .from("live_workers")
           .select("id, service, worker_id, profiles(full_name)")
@@ -68,7 +69,7 @@ export default function HireWorker() {
         const allLive = liveData || [];
         const liveWorkerIds = allLive.map(w => w.worker_id);
 
-        // Get worker categories
+        // Get categories from workers table
         let workerCategoryMap = {};
         if (liveWorkerIds.length > 0) {
           const { data: workersData } = await supabase
@@ -81,18 +82,24 @@ export default function HireWorker() {
           });
         }
 
-        // Merge category into live workers
+        // Merge data
         const merged = allLive.map(w => ({
           ...w,
           workerCategory: workerCategoryMap[w.worker_id] || w.service || "General",
         }));
 
-        // Filter by category if provided
-        const filtered = categoryFilter
-          ? merged.filter(w =>
-              w.workerCategory?.toLowerCase() === categoryFilter.toLowerCase()
-            )
-          : merged;
+        // Filter logic
+        let filtered = merged;
+
+        if (categoryFilter) {
+          filtered = merged.filter(w =>
+            w.workerCategory?.toLowerCase() === categoryFilter.toLowerCase()
+          );
+        } else if (serviceFilter) {
+          filtered = merged.filter(w =>
+            w.service?.toLowerCase() === serviceFilter.toLowerCase()
+          );
+        }
 
         setLiveWorkers(filtered);
       }
@@ -144,38 +151,42 @@ export default function HireWorker() {
     }
   };
 
-  if (loading) return (
-    <div className="min-h-screen bg-[#0B0F19] text-white flex items-center justify-center">
-      <div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
-    </div>
-  );
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#0B0F19] text-white flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
-  // ===== BROWSE WORKERS (with optional category filter) =====
+  // Browse Workers Mode
   if (!id) {
+    const title = categoryFilter 
+      ? `${categoryFilter} Workers` 
+      : serviceFilter 
+        ? `${serviceFilter} Workers` 
+        : "Live Workers";
+
     return (
       <div className="min-h-screen bg-[#0B0F19] text-white p-4 pb-24">
         <div className="flex items-center gap-3 mb-6">
           <button onClick={() => navigate(-1)} className="text-gray-400 hover:text-white">
             ← Back
           </button>
-          <h1 className="text-2xl font-bold">
-            {categoryFilter ? `${categoryFilter} Workers` : "Live Workers"}
-          </h1>
+          <h1 className="text-2xl font-bold">{title}</h1>
         </div>
 
         {liveWorkers.length === 0 ? (
           <div className="text-center text-gray-400 mt-20">
             <p className="text-4xl mb-4">😴</p>
-            <p>No {categoryFilter || ""} workers are live right now.</p>
+            <p>No {categoryFilter || serviceFilter || ""} workers are live right now.</p>
             <p className="text-sm mt-2">Check back soon!</p>
-            {categoryFilter && (
-              <button
-                onClick={() => navigate("/hire-worker")}
-                className="mt-4 text-green-400 underline text-sm"
-              >
-                View all live workers
-              </button>
-            )}
+            <button
+              onClick={() => navigate("/hire-worker")}
+              className="mt-6 text-green-400 underline text-sm"
+            >
+              View all live workers
+            </button>
           </div>
         ) : (
           <div className="space-y-4">
@@ -192,7 +203,9 @@ export default function HireWorker() {
                     <p className="font-semibold">
                       {w.profiles?.full_name || "Worker"}
                     </p>
-                    <p className="text-sm text-gray-400">{w.workerCategory}</p>
+                    <p className="text-sm text-gray-400">
+                      {w.service || w.workerCategory}
+                    </p>
                     <p className="text-xs text-green-400 mt-1">🟢 Live now</p>
                   </div>
                 </div>
@@ -200,7 +213,7 @@ export default function HireWorker() {
                   onClick={() => navigate(`/hire-worker/${w.worker_id}`)}
                   className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-xl text-sm font-semibold transition"
                 >
-                  Hire
+                  Book
                 </button>
               </div>
             ))}
@@ -210,16 +223,13 @@ export default function HireWorker() {
     );
   }
 
-  // ===== ERROR STATE =====
+  // Specific Worker Hiring Page
   if (error || !worker) {
     return (
       <div className="min-h-screen bg-[#0B0F19] text-white flex items-center justify-center">
         <div className="text-center">
           <p className="text-red-400">{error || "Worker not found"}</p>
-          <button
-            onClick={() => navigate(-1)}
-            className="mt-4 text-green-400 underline"
-          >
+          <button onClick={() => navigate(-1)} className="mt-4 text-green-400 underline">
             Go Back
           </button>
         </div>
@@ -227,20 +237,14 @@ export default function HireWorker() {
     );
   }
 
-  // ===== HIRE SPECIFIC WORKER =====
   return (
     <div className="min-h-screen bg-[#0B0F19] p-4 text-white pb-24">
-      <button
-        onClick={() => navigate(-1)}
-        className="text-gray-400 hover:text-white mb-4 text-sm"
-      >
+      <button onClick={() => navigate(-1)} className="text-gray-400 hover:text-white mb-4 text-sm">
         ← Back
       </button>
-
-      <h1 className="text-2xl font-bold mb-6">Hire Worker</h1>
+      <h1 className="text-2xl font-bold mb-6">Book Worker</h1>
 
       <div className="bg-[#101623] p-6 rounded-xl space-y-6">
-        {/* Worker Info */}
         <div className="flex items-center gap-4">
           <div className="w-16 h-16 rounded-full bg-green-600 flex items-center justify-center text-2xl font-bold">
             {worker.profiles?.full_name?.[0] || "W"}
@@ -254,29 +258,23 @@ export default function HireWorker() {
           </div>
         </div>
 
-        {/* Job Description */}
         <div>
-          <label className="text-gray-400 text-sm block mb-2">
-            What do you need done?
-          </label>
+          <label className="text-gray-400 text-sm block mb-2">What do you need done?</label>
           <textarea
             value={job}
             onChange={(e) => setJob(e.target.value)}
             placeholder="Describe the job in detail..."
-            className="w-full p-4 bg-[#141B2D] rounded-xl border border-gray-700 focus:border-green-500 outline-none min-h-[120px] text-white"
+            className="w-full p-4 bg-[#141B2D] rounded-xl border border-gray-700 focus:border-green-500 outline-none min-h-[120px]"
           />
         </div>
 
-        {/* Location */}
         <div>
-          <label className="text-gray-400 text-sm block mb-2">
-            Your Location
-          </label>
+          <label className="text-gray-400 text-sm block mb-2">Your Location</label>
           <input
             value={workerLocation}
             onChange={(e) => setWorkerLocation(e.target.value)}
             placeholder="e.g. Ikeja, Lagos"
-            className="w-full p-4 bg-[#141B2D] rounded-xl border border-gray-700 focus:border-green-500 outline-none text-white"
+            className="w-full p-4 bg-[#141B2D] rounded-xl border border-gray-700 focus:border-green-500 outline-none"
           />
         </div>
 

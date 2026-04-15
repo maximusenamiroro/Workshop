@@ -29,6 +29,7 @@ import SellerProfile from "../pages/profile/SellerProfile";
 import BuyerProfile from "../pages/profile/BuyerProfile";
 import ProductCatalogue from "../pages/workspace/ProductCatalouge";
 import ProductDetail from "../pages/workspace/ProductDetails";
+import BrowseCategories from "../pages/workspace/BrowseCategories";
 
 // ============ PROTECTED ROUTE ============
 const ProtectedRoute = ({ children, allowedRoles }) => {
@@ -163,6 +164,17 @@ export default function AppRoutes() {
             </ProtectedRoute>
           }
         />
+        
+        <Route
+  path="/browse-categories"
+  element={
+    <ProtectedRoute allowedRoles={["client"]}>
+      <MainLayout>
+        <BrowseCategories />
+      </MainLayout>
+    </ProtectedRoute>
+  }
+/>
 
         {/* Shop Routes — NEW */}
         <Route
