@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { FaBell, FaSearch, FaClipboardList } from "react-icons/fa";
 import { useSwipeable } from "react-swipeable";
 import { supabase } from "../lib/supabaseClient";
@@ -6,6 +6,48 @@ import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { businessCategories } from "../data/businessCategories";
 
+/* ---------------- HELPERS ---------------- */
+const buildGrouped = () => {
+  const grouped = {};
+  Object.keys(businessCategories).forEach((main) => {
+    grouped[main] = {};
+    businessCategories[main].forEach((sub) => {
+      grouped[main][sub] = [];
+    });
+  });
+  return grouped;
+};
+
+/* ---------------- BOOKING ITEM (FIXED HOOK USAGE) ---------------- */
+function BookingItem({ booking, onDelete }) {
+  const swipeHandlers = useSwipeable({
+    onSwipedLeft: () => onDelete(booking.id),
+  });
+
+  const getBookingColor = (status) => {
+    if (status === "accepted") return "bg-green-500/20 text-green-400";
+    if (status === "rejected") return "bg-red-500/20 text-red-400";
+    return "bg-yellow-500/20 text-yellow-400";
+  };
+
+  return (
+    <div
+      {...swipeHandlers}
+      className="bg-black p-3 rounded mb-2 flex justify-between"
+    >
+      <div>
+        <p>{booking.job_description}</p>
+        <p className="text-sm text-gray-400">{booking.location}</p>
+      </div>
+
+      <span className={getBookingColor(booking.status)}>
+        {booking.status}
+      </span>
+    </div>
+  );
+}
+
+/* ---------------- MAIN WORKSPACE ---------------- */
 export default function BuyerWorkspace() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -22,11 +64,7 @@ export default function BuyerWorkspace() {
   }, [user]);
 
   const fetchAll = async () => {
-    await Promise.all([
-      fetchBookings(),
-      fetchProducts(),
-      fetchWorkers(),
-    ]);
+    await Promise.all([fetchBookings(), fetchProducts(), fetchWorkers()]);
     setLoading(false);
   };
 
@@ -36,14 +74,7 @@ export default function BuyerWorkspace() {
       .from("products")
       .select("id, business_category, sub_category");
 
-    const grouped = {};
-
-    Object.keys(businessCategories).forEach((main) => {
-      grouped[main] = {};
-      businessCategories[main].forEach((sub) => {
-        grouped[main][sub] = [];
-      });
-    });
+    const grouped = buildGrouped();
 
     (data || []).forEach((p) => {
       if (grouped[p.business_category]?.[p.sub_category]) {
@@ -60,14 +91,7 @@ export default function BuyerWorkspace() {
       .from("workers")
       .select("id, business_category, sub_category, is_live");
 
-    const grouped = {};
-
-    Object.keys(businessCategories).forEach((main) => {
-      grouped[main] = {};
-      businessCategories[main].forEach((sub) => {
-        grouped[main][sub] = [];
-      });
-    });
+    const grouped = buildGrouped();
 
     (data || []).forEach((w) => {
       if (
@@ -83,9 +107,8 @@ export default function BuyerWorkspace() {
 
   /* ---------------- BOOKINGS ---------------- */
   const fetchBookings = async () => {
-    const {
-      data: { user: currentUser },
-    } = await supabase.auth.getUser();
+    const { data: { user: currentUser } } =
+      await supabase.auth.getUser();
 
     if (!currentUser) return;
 
@@ -103,11 +126,46 @@ export default function BuyerWorkspace() {
     fetchBookings();
   };
 
-  const getBookingColor = (status) => {
-    if (status === "accepted") return "bg-green-500/20 text-green-400";
-    if (status === "rejected") return "bg-red-500/20 text-red-400";
-    return "bg-yellow-500/20 text-yellow-400";
-  };
+  /* ---------------- SEARCH FILTER ---------------- */
+  const filteredSearch = search.toLowerCase();
+
+  const filteredBookings = useMemo(() => {
+    return bookings.filter((b) =>
+      `${b.job_description} ${b.location}`
+        .toLowerCase()
+        .includes(filteredSearch)
+    );
+  }, [bookings, search]);
+
+  const filteredWorkersMap = useMemo(() => {
+    const result = buildGrouped();
+
+    Object.entries(workersMap).forEach(([main, subs]) => {
+      Object.entries(subs).forEach(([sub, items]) => {
+        const filtered = items.filter((w) =>
+          `${main} ${sub}`.toLowerCase().includes(filteredSearch)
+        );
+        result[main][sub] = filtered;
+      });
+    });
+
+    return result;
+  }, [workersMap, search]);
+
+  const filteredProductsMap = useMemo(() => {
+    const result = buildGrouped();
+
+    Object.entries(productsMap).forEach(([main, subs]) => {
+      Object.entries(subs).forEach(([sub, items]) => {
+        const filtered = items.filter((p) =>
+          `${main} ${sub}`.toLowerCase().includes(filteredSearch)
+        );
+        result[main][sub] = filtered;
+      });
+    });
+
+    return result;
+  }, [productsMap, search]);
 
   if (loading) {
     return (
@@ -122,7 +180,10 @@ export default function BuyerWorkspace() {
 
       {/* HEADER */}
       <div className="flex justify-between items-center mb-6">
-        <FaClipboardList onClick={() => navigate("/productorder")} />
+        <FaClipboardList
+          className="cursor-pointer"
+          onClick={() => navigate("/productorder")}
+        />
         <h1>Workspace</h1>
         <FaBell />
       </div>
@@ -131,13 +192,13 @@ export default function BuyerWorkspace() {
       <div className="flex bg-white/10 p-2 rounded mb-6">
         <FaSearch />
         <input
-          className="bg-transparent ml-2 w-full"
-          placeholder="Search..."
+          className="bg-transparent ml-2 w-full outline-none"
+          placeholder="Search workspace..."
           onChange={(e) => setSearch(e.target.value)}
         />
       </div>
 
-      {/* ---------------- CATEGORY → SUB ---------------- */}
+      {/* ---------------- CATEGORY ---------------- */}
       <div className="mb-6">
         <h2>Explore Businesses</h2>
 
@@ -149,9 +210,7 @@ export default function BuyerWorkspace() {
               {subs.map((sub) => (
                 <button
                   key={sub}
-                  onClick={() =>
-                    navigate(`/category/${main}/${sub}`)
-                  }
+                  onClick={() => navigate(`/category/${main}/${sub}`)}
                   className="bg-white/10 px-3 py-2 rounded"
                 >
                   {sub}
@@ -166,16 +225,14 @@ export default function BuyerWorkspace() {
       <div className="mb-6">
         <h2 className="text-green-400">🔴 Live Workers</h2>
 
-        {Object.entries(workersMap).map(([main, subs]) =>
+        {Object.entries(filteredWorkersMap).map(([main, subs]) =>
           Object.entries(subs).map(([sub, workers]) => {
             if (workers.length === 0) return null;
 
             return (
               <button
                 key={sub}
-                onClick={() =>
-                  navigate(`/live/${main}/${sub}`)
-                }
+                onClick={() => navigate(`/live/${main}/${sub}`)}
                 className="block w-full text-left bg-green-500/10 p-3 rounded mb-2"
               >
                 {sub} ({workers.length} live)
@@ -189,44 +246,27 @@ export default function BuyerWorkspace() {
       <div className="bg-white/10 p-4 rounded mb-6">
         <h2>My Bookings</h2>
 
-        {bookings.map((b) => {
-          const swipeHandlers = useSwipeable({
-            onSwipedLeft: () => handleDeleteBooking(b.id),
-          });
-
-          return (
-            <div
-              key={b.id}
-              {...swipeHandlers}
-              className="bg-black p-3 rounded mb-2 flex justify-between"
-            >
-              <div>
-                <p>{b.job_description}</p>
-                <p className="text-sm text-gray-400">{b.location}</p>
-              </div>
-
-              <span className={getBookingColor(b.status)}>
-                {b.status}
-              </span>
-            </div>
-          );
-        })}
+        {filteredBookings.map((b) => (
+          <BookingItem
+            key={b.id}
+            booking={b}
+            onDelete={handleDeleteBooking}
+          />
+        ))}
       </div>
 
       {/* ---------------- PRODUCT ORDERS ---------------- */}
       <div className="mb-6">
         <h2 className="text-yellow-400">🛒 Product Orders</h2>
 
-        {Object.entries(productsMap).map(([main, subs]) =>
+        {Object.entries(filteredProductsMap).map(([main, subs]) =>
           Object.entries(subs).map(([sub, items]) => {
             if (items.length === 0) return null;
 
             return (
               <button
                 key={sub}
-                onClick={() =>
-                  navigate(`/shop/${main}/${sub}`)
-                }
+                onClick={() => navigate(`/shop/${main}/${sub}`)}
                 className="block w-full text-left bg-yellow-500/10 p-3 rounded mb-2"
               >
                 {sub} ({items.length} items)
