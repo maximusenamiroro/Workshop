@@ -16,12 +16,12 @@ const categoryIcons = {
   General: { icon: "📦" },
 };
 
-/* ---------------- REUSABLE UI ---------------- */
+/* ---------------- UI COMPONENTS ---------------- */
 function CategoryHeader({ icon, title }) {
   return (
     <div className="mb-4 flex items-center gap-3 border-b border-white/10 pb-2">
       <div className="text-3xl">{icon}</div>
-      <div className="text-lg font-semibold text-white">{title}</div>
+      <div className="text-lg font-semibold">{title}</div>
     </div>
   );
 }
@@ -30,14 +30,14 @@ function SubCategoryButton({ label, count, color, onClick }) {
   return (
     <button
       onClick={onClick}
-      className={`block w-full text-left p-3 rounded mb-2 ${color}`}
+      className={`w-full text-left p-3 rounded mb-2 ${color}`}
     >
       {label} ({count})
     </button>
   );
 }
 
-/* ---------------- HELPERS ---------------- */
+/* ---------------- GROUP BUILDER ---------------- */
 const buildGrouped = () => {
   const grouped = {};
 
@@ -49,7 +49,7 @@ const buildGrouped = () => {
   });
 
   grouped["General"] = {
-    "Others": [],
+    "General Market": [],
     "General Workers": [],
   };
 
@@ -63,9 +63,9 @@ function BookingItem({ booking, onDelete }) {
   });
 
   const getStatusColor = (status) => {
-    if (status === "accepted") return "bg-green-500/20 text-green-400";
-    if (status === "rejected") return "bg-red-500/20 text-red-400";
-    return "bg-yellow-500/20 text-yellow-400";
+    if (status === "accepted") return "text-green-400";
+    if (status === "rejected") return "text-red-400";
+    return "text-yellow-400";
   };
 
   return (
@@ -90,7 +90,7 @@ export default function BuyerWorkspace() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const [activeTab, setActiveTab] = useState("products");
+  const [activeTab, setActiveTab] = useState("product_orders");
 
   const [bookings, setBookings] = useState([]);
   const [productsMap, setProductsMap] = useState({});
@@ -99,8 +99,7 @@ export default function BuyerWorkspace() {
   const [search, setSearch] = useState("");
 
   useEffect(() => {
-    if (!user) return;
-    fetchAll();
+    if (user) fetchAll();
   }, [user]);
 
   const fetchAll = async () => {
@@ -112,7 +111,7 @@ export default function BuyerWorkspace() {
   const fetchProducts = async () => {
     const { data } = await supabase
       .from("products")
-      .select("id, business_category, sub_category");
+      .select("id, name, business_category, sub_category");
 
     const grouped = buildGrouped();
 
@@ -120,13 +119,10 @@ export default function BuyerWorkspace() {
       const main = p.business_category;
       const sub = p.sub_category;
 
-      if (!main || !sub) {
-        grouped["General"]["Others"].push(p);
-        return;
-      }
-
       if (grouped[main]?.[sub]) {
         grouped[main][sub].push(p);
+      } else {
+        grouped["General"]["General Market"].push(p);
       }
     });
 
@@ -142,18 +138,15 @@ export default function BuyerWorkspace() {
     const grouped = buildGrouped();
 
     (data || []).forEach((w) => {
+      if (!w.is_live) return;
+
       const main = w.business_category;
       const sub = w.sub_category;
 
-      if (!w.is_live) return;
-
-      if (!main || !sub) {
-        grouped["General"]["General Workers"].push(w);
-        return;
-      }
-
       if (grouped[main]?.[sub]) {
         grouped[main][sub].push(w);
+      } else {
+        grouped["General"]["General Workers"].push(w);
       }
     });
 
@@ -184,33 +177,32 @@ export default function BuyerWorkspace() {
   /* ---------------- SEARCH ---------------- */
   const searchLower = search.toLowerCase();
 
-  const filteredProductsMap = useMemo(() => {
-    const result = JSON.parse(JSON.stringify(productsMap));
+  const filterMap = (map) => {
+    return Object.fromEntries(
+      Object.entries(map).map(([main, subs]) => [
+        main,
+        Object.fromEntries(
+          Object.entries(subs).map(([sub, items]) => [
+            sub,
+            items.filter((item) => {
+              const text = `${main} ${sub} ${item.name || ""}`.toLowerCase();
+              return text.includes(searchLower);
+            }),
+          ])
+        ),
+      ])
+    );
+  };
 
-    Object.entries(result).forEach(([main, subs]) => {
-      Object.entries(subs).forEach(([sub, items]) => {
-        result[main][sub] = items.filter(() =>
-          `${main} ${sub}`.toLowerCase().includes(searchLower)
-        );
-      });
-    });
+  const filteredProductsMap = useMemo(
+    () => filterMap(productsMap),
+    [productsMap, search]
+  );
 
-    return result;
-  }, [productsMap, search]);
-
-  const filteredWorkersMap = useMemo(() => {
-    const result = JSON.parse(JSON.stringify(workersMap));
-
-    Object.entries(result).forEach(([main, subs]) => {
-      Object.entries(subs).forEach(([sub, items]) => {
-        result[main][sub] = items.filter(() =>
-          `${main} ${sub}`.toLowerCase().includes(searchLower)
-        );
-      });
-    });
-
-    return result;
-  }, [workersMap, search]);
+  const filteredWorkersMap = useMemo(
+    () => filterMap(workersMap),
+    [workersMap, search]
+  );
 
   const filteredBookings = useMemo(() => {
     return bookings.filter((b) =>
@@ -233,7 +225,7 @@ export default function BuyerWorkspace() {
 
       {/* HEADER */}
       <div className="flex justify-between items-center mb-6">
-        <FaClipboardList onClick={() => navigate("/productorder")} />
+        <FaClipboardList />
         <h1 className="text-lg font-semibold">Workspace</h1>
         <FaBell />
       </div>
@@ -250,126 +242,99 @@ export default function BuyerWorkspace() {
 
       {/* TABS */}
       <div className="flex gap-2 mb-6">
-        <button
-          onClick={() => setActiveTab("products")}
-          className={`flex-1 p-2 rounded ${
-            activeTab === "products" ? "bg-yellow-500 text-black" : "bg-white/10"
-          }`}
-        >
-          🛒 Products
-        </button>
-
-        <button
-          onClick={() => setActiveTab("workers")}
-          className={`flex-1 p-2 rounded ${
-            activeTab === "workers" ? "bg-green-500 text-black" : "bg-white/10"
-          }`}
-        >
-          🔴 Workers
-        </button>
-
-        <button
-          onClick={() => setActiveTab("bookings")}
-          className={`flex-1 p-2 rounded ${
-            activeTab === "bookings" ? "bg-blue-500 text-black" : "bg-white/10"
-          }`}
-        >
-          📄 Bookings
-        </button>
+        {[
+          ["product_orders", "🛒 Product Orders"],
+          ["live_businesses", "🔴 Live Businesses"],
+          ["my_bookings", "📄 My Bookings"],
+        ].map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setActiveTab(key)}
+            className={`flex-1 p-2 rounded ${
+              activeTab === key ? "bg-white text-black" : "bg-white/10"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
-      {/* 🛒 PRODUCTS TAB */}
-      {activeTab === "products" && (
-        <div>
-          {Object.entries(filteredProductsMap).map(([main, subs]) => (
-            <div key={main} className="mb-6">
-
-              <CategoryHeader
-                icon={categoryIcons[main]?.icon || "📦"}
-                title={main}
-              />
-
-              {Object.entries(subs).map(([sub, items]) => {
-                if (!items.length) return null;
-
-                return (
-                  <SubCategoryButton
-                    key={sub}
-                    label={sub}
-                    count={items.length}
-                    color="bg-yellow-500/10"
-                    onClick={() => navigate(`/shop/${main}/${sub}`)}
-                  />
-                );
-              })}
-
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* 🔴 WORKERS TAB */}
-      {activeTab === "workers" && (
-        <div>
-          {Object.entries(filteredWorkersMap).map(([main, subs]) => (
-            <div key={main} className="mb-6">
-
-              <CategoryHeader
-                icon={categoryIcons[main]?.icon || "📦"}
-                title={main}
-              />
-
-              {Object.entries(subs).map(([sub, workers]) => {
-                if (!workers.length) return null;
-
-                return (
-                  <div key={sub}>
-                    <SubCategoryButton
-                      label={sub}
-                      count={workers.length}
-                      color="bg-green-500/10"
-                      onClick={() => navigate(`/live/${main}/${sub}`)}
-                    />
-
-                    {main === "General" &&
-                      sub === "General Workers" &&
-                      workers.map((w) => (
-                        <div
-                          key={w.id}
-                          className="flex justify-between items-center bg-black p-2 mb-2 rounded"
-                        >
-                          <span>{w.name || "General Worker"}</span>
-
-                          <button
-                            onClick={() => navigate(`/hire/${w.id}`)}
-                            className="bg-blue-500 px-3 py-1 rounded"
-                          >
-                            Hire
-                          </button>
-                        </div>
-                      ))}
-                  </div>
-                );
-              })}
-
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* 📄 BOOKINGS TAB */}
-      {activeTab === "bookings" && (
-        <div className="bg-white/10 p-4 rounded">
-          {filteredBookings.map((b) => (
-            <BookingItem
-              key={b.id}
-              booking={b}
-              onDelete={handleDeleteBooking}
+      {/* 🛒 PRODUCT ORDERS */}
+      {activeTab === "product_orders" &&
+        Object.entries(filteredProductsMap).map(([main, subs]) => (
+          <div key={main} className="mb-6">
+            <CategoryHeader
+              icon={categoryIcons[main]?.icon || "📦"}
+              title={main}
             />
-          ))}
+
+            {Object.entries(subs).map(([sub, items]) =>
+              items.length ? (
+                <SubCategoryButton
+                  key={sub}
+                  label={sub}
+                  count={items.length}
+                  color="bg-yellow-500/10"
+                  onClick={() => navigate(`/shop/${main}/${sub}`)}
+                />
+              ) : null
+            )}
+          </div>
+        ))}
+
+      {/* 🔴 LIVE BUSINESSES */}
+      {activeTab === "live_businesses" &&
+        Object.entries(filteredWorkersMap).map(([main, subs]) => (
+          <div key={main} className="mb-6">
+            <CategoryHeader
+              icon={categoryIcons[main]?.icon || "📦"}
+              title={main}
+            />
+
+            {Object.entries(subs).map(([sub, workers]) => (
+              <div key={sub}>
+                <SubCategoryButton
+                  label={sub}
+                  count={workers.length}
+                  color="bg-green-500/10"
+                  onClick={() => navigate(`/live/${main}/${sub}`)}
+                />
+
+                {workers.map((w) => (
+                  <div
+                    key={w.id}
+                    className="flex justify-between bg-black p-2 mb-2 rounded"
+                  >
+                    <span>{w.name}</span>
+                    <button
+                      onClick={() => navigate(`/hire/${w.id}`)}
+                      className="bg-blue-500 px-3 py-1 rounded"
+                    >
+                      Hire
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        ))}
+
+      {/* 📄 MY BOOKINGS */}
+      {activeTab === "my_bookings" && (
+        <div className="bg-white/10 p-4 rounded">
+          {filteredBookings.length ? (
+            filteredBookings.map((b) => (
+              <BookingItem
+                key={b.id}
+                booking={b}
+                onDelete={handleDeleteBooking}
+              />
+            ))
+          ) : (
+            <p className="text-gray-400">No bookings found</p>
+          )}
         </div>
       )}
-
     </div>
   );
 }
