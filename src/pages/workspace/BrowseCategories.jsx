@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
-import { FaSearch } from "react-icons/fa";
+import { FaSearch, FaArrowLeft, FaUsers } from "react-icons/fa";
 
 const CATEGORY_EMOJI = {
   "Fashion": "👗", "Shoes": "👟", "Watches": "⌚", "Electronics": "📱",
@@ -16,26 +16,25 @@ const CATEGORY_EMOJI = {
 export default function BrowseCategories() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const type = searchParams.get("type"); // "specialized" or "general"
+  const type = searchParams.get("type");
 
-  const [categories, setCategories] = useState([]);
+  const [categories, setCategories] = useState([]); // { name, count }
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
-  const title = type === "specialized" 
-    ? "Specialized Workers" 
-    : "General Workers";
+  const title = type === "specialized" ? "Specialized Categories" : "General Services";
+  const borderColor = type === "specialized" ? "border-yellow-500" : "border-blue-500";
 
   useEffect(() => {
-    fetchCategories();
+    fetchCategoriesWithCount();
   }, [type]);
 
-  const fetchCategories = async () => {
+  // Fetch categories + live worker count
+  const fetchCategoriesWithCount = async () => {
     try {
       setLoading(true);
 
       if (type === "specialized") {
-        // Fetch Specialized Categories
         const { data: liveData } = await supabase
           .from("live_workers")
           .select("worker_id");
@@ -47,20 +46,38 @@ export default function BrowseCategories() {
             .select("category")
             .in("id", workerIds);
 
-          const unique = [...new Set((workersData || []).map(w => w.category).filter(Boolean))];
-          setCategories(unique);
+          // Count workers per category
+          const countMap = {};
+          (workersData || []).forEach(w => {
+            const cat = w.category;
+            if (cat) countMap[cat] = (countMap[cat] || 0) + 1;
+          });
+
+          const formatted = Object.entries(countMap).map(([name, count]) => ({
+            name,
+            count,
+          }));
+
+          setCategories(formatted);
         }
       } else {
-        // Fetch General Workers Services
-        const { data, error } = await supabase
+        // General Workers
+        const { data } = await supabase
           .from("live_workers")
-          .select("service")
-          .not("service", "is", null);
+          .select("service");
 
-        if (error) throw error;
+        const countMap = {};
+        (data || []).forEach(item => {
+          const service = item.service;
+          if (service) countMap[service] = (countMap[service] || 0) + 1;
+        });
 
-        const uniqueServices = [...new Set((data || []).map(item => item.service).filter(Boolean))];
-        setCategories(uniqueServices);
+        const formatted = Object.entries(countMap).map(([name, count]) => ({
+          name,
+          count,
+        }));
+
+        setCategories(formatted);
       }
     } catch (err) {
       console.error("Error fetching categories:", err.message);
@@ -71,68 +88,82 @@ export default function BrowseCategories() {
 
   const filteredCategories = useMemo(() => {
     return categories.filter(cat =>
-      cat.toLowerCase().includes(search.toLowerCase())
+      cat.name.toLowerCase().includes(search.toLowerCase())
     );
   }, [categories, search]);
 
   return (
-    <div className="min-h-screen bg-[#0f0f0f] text-white p-4 pb-24">
+    <div className="min-h-screen bg-[#0a0a0a] text-white p-4 pb-24">
       {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
-        <button 
-          onClick={() => navigate(-1)} 
-          className="text-gray-400 hover:text-white text-xl"
-        >
-          ←
-        </button>
-        <h1 className="text-2xl font-bold">{title}</h1>
+      <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate(-1)}
+            className="p-3 hover:bg-white/10 rounded-full transition"
+          >
+            <FaArrowLeft size={24} />
+          </button>
+          <div>
+            <h1 className="text-3xl font-bold">{title}</h1>
+            <p className="text-gray-400 text-sm">Choose a category to see live workers</p>
+          </div>
+        </div>
       </div>
 
-      {/* Search Bar */}
-      <div className="flex items-center bg-white/5 p-3 rounded-xl mb-8">
-        <FaSearch className="mr-3 text-white/50" />
-        <input
-          type="text"
-          placeholder="Search categories..."
-          className="bg-transparent w-full outline-none text-white placeholder-gray-500"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
+      {/* Search */}
+      <div className="relative mb-8">
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-4 flex items-center">
+          <FaSearch className="text-gray-400 mr-3" size={20} />
+          <input
+            type="text"
+            placeholder="Search for a service..."
+            className="bg-transparent flex-1 outline-none text-lg placeholder-gray-500"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
       </div>
 
-      {/* Loading State */}
+      {/* Categories Grid */}
       {loading ? (
         <div className="flex justify-center py-20">
-          <div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+          <div className="w-10 h-10 border-4 border-green-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : filteredCategories.length === 0 ? (
+        <div className="text-center py-24">
+          <p className="text-6xl mb-4">🔍</p>
+          <p className="text-xl text-gray-400">No categories found</p>
         </div>
       ) : (
-        <>
-          {filteredCategories.length === 0 ? (
-            <div className="text-center py-20 text-gray-400">
-              <p className="text-5xl mb-4">😔</p>
-              <p>No categories found</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-6">
-              {filteredCategories.map((cat) => (
-                <button
-                  key={cat}
-                  onClick={() => navigate(
-                    type === "specialized"
-                      ? `/hire-worker?category=${encodeURIComponent(cat)}`
-                      : `/hire-worker?service=${encodeURIComponent(cat)}`
-                  )}
-                  className="group flex flex-col items-center text-center transition-all hover:scale-105"
-                >
-                  <div className="w-28 h-28 rounded-3xl bg-white/10 border-2 border-white/20 flex items-center justify-center text-6xl group-hover:border-green-500 transition">
-                    {type === "specialized" ? (CATEGORY_EMOJI[cat] || "👷") : "👷"}
-                  </div>
-                  <p className="mt-4 font-medium text-lg">{cat}</p>
-                </button>
-              ))}
-            </div>
-          )}
-        </>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {filteredCategories.map((cat) => (
+            <button
+              key={cat.name}
+              onClick={() => navigate(
+                type === "specialized"
+                  ? `/hire-worker?category=${encodeURIComponent(cat.name)}`
+                  : `/hire-worker?service=${encodeURIComponent(cat.name)}`
+              )}
+              className={`group relative bg-gradient-to-br from-white/5 to-white/10 border border-white/10 hover:border-${borderColor}/50 rounded-3xl p-6 transition-all duration-300 hover:scale-[1.03] active:scale-95 overflow-hidden`}
+            >
+              <div className="flex items-start justify-between">
+                <div className="text-5xl mb-4 transition group-hover:scale-110">
+                  {type === "specialized" ? (CATEGORY_EMOJI[cat.name] || "👷") : "👷"}
+                </div>
+                <div className="bg-white/10 text-xs px-3 py-1 rounded-full flex items-center gap-1">
+                  <FaUsers size={14} />
+                  <span>{cat.count} live</span>
+                </div>
+              </div>
+
+              <h3 className="text-xl font-semibold text-left mt-2">{cat.name}</h3>
+              <p className="text-gray-400 text-sm mt-1">Tap to see available workers</p>
+
+              {/* Subtle shine effect */}
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent opacity-0 group-hover:opacity-30 transition pointer-events-none" />
+            </button>
+          ))}
+        </div>
       )}
     </div>
   );
