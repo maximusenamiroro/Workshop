@@ -6,19 +6,36 @@ import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { businessCategories } from "../data/businessCategories";
 
+/* ---------------- ICON MAP ---------------- */
+const categoryIcons = {
+  Fashion: { icon: "👕" },
+  Tech: { icon: "📱" },
+  Services: { icon: "🛠️" },
+  Beauty: { icon: "💄" },
+  Food: { icon: "🍔" },
+  General: { icon: "📦" },
+};
+
 /* ---------------- HELPERS ---------------- */
 const buildGrouped = () => {
   const grouped = {};
+
   Object.keys(businessCategories).forEach((main) => {
     grouped[main] = {};
     businessCategories[main].forEach((sub) => {
       grouped[main][sub] = [];
     });
   });
+
+  grouped["General"] = {
+    "Others": [],
+    "General Workers": [],
+  };
+
   return grouped;
 };
 
-/* ---------------- BOOKING ITEM (FIXED HOOK USAGE) ---------------- */
+/* ---------------- BOOKING ITEM ---------------- */
 function BookingItem({ booking, onDelete }) {
   const swipeHandlers = useSwipeable({
     onSwipedLeft: () => onDelete(booking.id),
@@ -77,8 +94,16 @@ export default function BuyerWorkspace() {
     const grouped = buildGrouped();
 
     (data || []).forEach((p) => {
-      if (grouped[p.business_category]?.[p.sub_category]) {
-        grouped[p.business_category][p.sub_category].push(p);
+      const main = p.business_category;
+      const sub = p.sub_category;
+
+      if (!main || !sub) {
+        grouped["General"]["Others"].push(p);
+        return;
+      }
+
+      if (grouped[main]?.[sub]) {
+        grouped[main][sub].push(p);
       }
     });
 
@@ -89,16 +114,23 @@ export default function BuyerWorkspace() {
   const fetchWorkers = async () => {
     const { data } = await supabase
       .from("workers")
-      .select("id, business_category, sub_category, is_live");
+      .select("id, name, business_category, sub_category, is_live");
 
     const grouped = buildGrouped();
 
     (data || []).forEach((w) => {
-      if (
-        w.is_live &&
-        grouped[w.business_category]?.[w.sub_category]
-      ) {
-        grouped[w.business_category][w.sub_category].push(w);
+      const main = w.business_category;
+      const sub = w.sub_category;
+
+      if (!w.is_live) return;
+
+      if (!main || !sub) {
+        grouped["General"]["General Workers"].push(w);
+        return;
+      }
+
+      if (grouped[main]?.[sub]) {
+        grouped[main][sub].push(w);
       }
     });
 
@@ -126,46 +158,44 @@ export default function BuyerWorkspace() {
     fetchBookings();
   };
 
-  /* ---------------- SEARCH FILTER ---------------- */
-  const filteredSearch = search.toLowerCase();
+  /* ---------------- SEARCH ---------------- */
+  const searchLower = search.toLowerCase();
 
-  const filteredBookings = useMemo(() => {
-    return bookings.filter((b) =>
-      `${b.job_description} ${b.location}`
-        .toLowerCase()
-        .includes(filteredSearch)
-    );
-  }, [bookings, search]);
+  const filteredProductsMap = useMemo(() => {
+    const result = JSON.parse(JSON.stringify(productsMap));
+
+    Object.entries(result).forEach(([main, subs]) => {
+      Object.entries(subs).forEach(([sub, items]) => {
+        result[main][sub] = items.filter((p) =>
+          `${main} ${sub}`.toLowerCase().includes(searchLower)
+        );
+      });
+    });
+
+    return result;
+  }, [productsMap, search]);
 
   const filteredWorkersMap = useMemo(() => {
-    const result = buildGrouped();
+    const result = JSON.parse(JSON.stringify(workersMap));
 
-    Object.entries(workersMap).forEach(([main, subs]) => {
+    Object.entries(result).forEach(([main, subs]) => {
       Object.entries(subs).forEach(([sub, items]) => {
-        const filtered = items.filter((w) =>
-          `${main} ${sub}`.toLowerCase().includes(filteredSearch)
+        result[main][sub] = items.filter((w) =>
+          `${main} ${sub}`.toLowerCase().includes(searchLower)
         );
-        result[main][sub] = filtered;
       });
     });
 
     return result;
   }, [workersMap, search]);
 
-  const filteredProductsMap = useMemo(() => {
-    const result = buildGrouped();
-
-    Object.entries(productsMap).forEach(([main, subs]) => {
-      Object.entries(subs).forEach(([sub, items]) => {
-        const filtered = items.filter((p) =>
-          `${main} ${sub}`.toLowerCase().includes(filteredSearch)
-        );
-        result[main][sub] = filtered;
-      });
-    });
-
-    return result;
-  }, [productsMap, search]);
+  const filteredBookings = useMemo(() => {
+    return bookings.filter((b) =>
+      `${b.job_description} ${b.location}`
+        .toLowerCase()
+        .includes(searchLower)
+    );
+  }, [bookings, search]);
 
   if (loading) {
     return (
@@ -198,51 +228,43 @@ export default function BuyerWorkspace() {
         />
       </div>
 
-      {/* ---------------- CATEGORY ---------------- */}
+      {/* 🛒 PRODUCT ORDERS */}
       <div className="mb-6">
-        <h2>Explore Businesses</h2>
+        <h2 className="text-yellow-400">🛒 Product Orders</h2>
 
-        {Object.entries(businessCategories).map(([main, subs]) => (
-          <div key={main} className="mb-4">
-            <p className="text-gray-400">{main}</p>
+        {Object.entries(filteredProductsMap).map(([main, subs]) => (
+          <div key={main} className="mb-6">
 
-            <div className="flex gap-2 overflow-x-auto">
-              {subs.map((sub) => (
-                <button
-                  key={sub}
-                  onClick={() => navigate(`/category/${main}/${sub}`)}
-                  className="bg-white/10 px-3 py-2 rounded"
-                >
-                  {sub}
-                </button>
-              ))}
+            {/* MAIN CATEGORY ICON + TEXT */}
+            <div className="flex flex-col items-center mb-4">
+              <div className="text-4xl">
+                {categoryIcons[main]?.icon || "📦"}
+              </div>
+              <div className="text-sm text-gray-300 mt-1">
+                {main}
+              </div>
             </div>
+
+            {/* SUB CATEGORIES */}
+            {Object.entries(subs).map(([sub, items]) => {
+              if (!items.length) return null;
+
+              return (
+                <button
+                  key={`${main}-${sub}`}
+                  onClick={() => navigate(`/shop/${main}/${sub}`)}
+                  className="block w-full text-left bg-yellow-500/10 p-3 rounded mb-2"
+                >
+                  {sub} ({items.length})
+                </button>
+              );
+            })}
+
           </div>
         ))}
       </div>
 
-      {/* ---------------- LIVE WORKERS ---------------- */}
-      <div className="mb-6">
-        <h2 className="text-green-400">🔴 Live Workers</h2>
-
-        {Object.entries(filteredWorkersMap).map(([main, subs]) =>
-          Object.entries(subs).map(([sub, workers]) => {
-            if (workers.length === 0) return null;
-
-            return (
-              <button
-                key={sub}
-                onClick={() => navigate(`/live/${main}/${sub}`)}
-                className="block w-full text-left bg-green-500/10 p-3 rounded mb-2"
-              >
-                {sub} ({workers.length} live)
-              </button>
-            );
-          })
-        )}
-      </div>
-
-      {/* ---------------- BOOKINGS ---------------- */}
+      {/* 📄 BOOKINGS */}
       <div className="bg-white/10 p-4 rounded mb-6">
         <h2>My Bookings</h2>
 
@@ -255,25 +277,63 @@ export default function BuyerWorkspace() {
         ))}
       </div>
 
-      {/* ---------------- PRODUCT ORDERS ---------------- */}
+      {/* 🔴 LIVE WORKERS */}
       <div className="mb-6">
-        <h2 className="text-yellow-400">🛒 Product Orders</h2>
+        <h2 className="text-green-400">🔴 Live Workers</h2>
 
-        {Object.entries(filteredProductsMap).map(([main, subs]) =>
-          Object.entries(subs).map(([sub, items]) => {
-            if (items.length === 0) return null;
+        {Object.entries(filteredWorkersMap).map(([main, subs]) => (
+          <div key={main} className="mb-6">
 
-            return (
-              <button
-                key={sub}
-                onClick={() => navigate(`/shop/${main}/${sub}`)}
-                className="block w-full text-left bg-yellow-500/10 p-3 rounded mb-2"
-              >
-                {sub} ({items.length} items)
-              </button>
-            );
-          })
-        )}
+            {/* MAIN CATEGORY ICON + TEXT */}
+            <div className="flex flex-col items-center mb-4">
+              <div className="text-4xl">
+                {categoryIcons[main]?.icon || "📦"}
+              </div>
+              <div className="text-sm text-gray-300 mt-1">
+                {main}
+              </div>
+            </div>
+
+            {/* SUB CATEGORIES */}
+            {Object.entries(subs).map(([sub, workers]) => {
+              if (!workers.length) return null;
+
+              return (
+                <div key={`${main}-${sub}`}>
+
+                  <button
+                    onClick={() =>
+                      navigate(`/live/${main}/${sub}`)
+                    }
+                    className="block w-full text-left bg-green-500/10 p-3 rounded mb-2"
+                  >
+                    {sub} ({workers.length} live)
+                  </button>
+
+                  {/* GENERAL HIRE BUTTON */}
+                  {main === "General" &&
+                    sub === "General Workers" &&
+                    workers.map((w) => (
+                      <div
+                        key={w.id}
+                        className="flex justify-between items-center bg-black p-2 mb-2 rounded"
+                      >
+                        <span>{w.name || "General Worker"}</span>
+
+                        <button
+                          onClick={() => navigate(`/hire/${w.id}`)}
+                          className="bg-blue-500 px-3 py-1 rounded"
+                        >
+                          Hire
+                        </button>
+                      </div>
+                    ))}
+                </div>
+              );
+            })}
+
+          </div>
+        ))}
       </div>
 
     </div>
