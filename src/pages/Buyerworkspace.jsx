@@ -4,7 +4,7 @@ import { useSwipeable } from "react-swipeable";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
-import { businessCategories } from "../data/businessCategories";
+import { businessCategories } from "./data/bussinesscategorie";
 
 /* ---------------- ICON MAP ---------------- */
 const categoryIcons = {
