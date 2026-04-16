@@ -16,6 +16,27 @@ const categoryIcons = {
   General: { icon: "📦" },
 };
 
+/* ---------------- REUSABLE UI ---------------- */
+function CategoryHeader({ icon, title }) {
+  return (
+    <div className="mb-4 flex items-center gap-3 border-b border-white/10 pb-2">
+      <div className="text-3xl">{icon}</div>
+      <div className="text-lg font-semibold text-white">{title}</div>
+    </div>
+  );
+}
+
+function SubCategoryButton({ label, count, color, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`block w-full text-left p-3 rounded mb-2 ${color}`}
+    >
+      {label} ({count})
+    </button>
+  );
+}
+
 /* ---------------- HELPERS ---------------- */
 const buildGrouped = () => {
   const grouped = {};
@@ -41,7 +62,7 @@ function BookingItem({ booking, onDelete }) {
     onSwipedLeft: () => onDelete(booking.id),
   });
 
-  const getBookingColor = (status) => {
+  const getStatusColor = (status) => {
     if (status === "accepted") return "bg-green-500/20 text-green-400";
     if (status === "rejected") return "bg-red-500/20 text-red-400";
     return "bg-yellow-500/20 text-yellow-400";
@@ -57,7 +78,7 @@ function BookingItem({ booking, onDelete }) {
         <p className="text-sm text-gray-400">{booking.location}</p>
       </div>
 
-      <span className={getBookingColor(booking.status)}>
+      <span className={getStatusColor(booking.status)}>
         {booking.status}
       </span>
     </div>
@@ -68,6 +89,8 @@ function BookingItem({ booking, onDelete }) {
 export default function BuyerWorkspace() {
   const { user } = useAuth();
   const navigate = useNavigate();
+
+  const [activeTab, setActiveTab] = useState("products");
 
   const [bookings, setBookings] = useState([]);
   const [productsMap, setProductsMap] = useState({});
@@ -166,7 +189,7 @@ export default function BuyerWorkspace() {
 
     Object.entries(result).forEach(([main, subs]) => {
       Object.entries(subs).forEach(([sub, items]) => {
-        result[main][sub] = items.filter((p) =>
+        result[main][sub] = items.filter(() =>
           `${main} ${sub}`.toLowerCase().includes(searchLower)
         );
       });
@@ -180,7 +203,7 @@ export default function BuyerWorkspace() {
 
     Object.entries(result).forEach(([main, subs]) => {
       Object.entries(subs).forEach(([sub, items]) => {
-        result[main][sub] = items.filter((w) =>
+        result[main][sub] = items.filter(() =>
           `${main} ${sub}`.toLowerCase().includes(searchLower)
         );
       });
@@ -210,16 +233,13 @@ export default function BuyerWorkspace() {
 
       {/* HEADER */}
       <div className="flex justify-between items-center mb-6">
-        <FaClipboardList
-          className="cursor-pointer"
-          onClick={() => navigate("/productorder")}
-        />
-        <h1>Workspace</h1>
+        <FaClipboardList onClick={() => navigate("/productorder")} />
+        <h1 className="text-lg font-semibold">Workspace</h1>
         <FaBell />
       </div>
 
       {/* SEARCH */}
-      <div className="flex bg-white/10 p-2 rounded mb-6">
+      <div className="flex bg-white/10 p-2 rounded mb-4">
         <FaSearch />
         <input
           className="bg-transparent ml-2 w-full outline-none"
@@ -228,113 +248,127 @@ export default function BuyerWorkspace() {
         />
       </div>
 
-      {/* 🛒 PRODUCT ORDERS */}
-      <div className="mb-6">
-        <h2 className="text-yellow-400">🛒 Product Orders</h2>
+      {/* TABS */}
+      <div className="flex gap-2 mb-6">
+        <button
+          onClick={() => setActiveTab("products")}
+          className={`flex-1 p-2 rounded ${
+            activeTab === "products" ? "bg-yellow-500 text-black" : "bg-white/10"
+          }`}
+        >
+          🛒 Products
+        </button>
 
-        {Object.entries(filteredProductsMap).map(([main, subs]) => (
-          <div key={main} className="mb-6">
+        <button
+          onClick={() => setActiveTab("workers")}
+          className={`flex-1 p-2 rounded ${
+            activeTab === "workers" ? "bg-green-500 text-black" : "bg-white/10"
+          }`}
+        >
+          🔴 Workers
+        </button>
 
-            {/* MAIN CATEGORY ICON + TEXT */}
-            <div className="flex flex-col items-center mb-4">
-              <div className="text-4xl">
-                {categoryIcons[main]?.icon || "📦"}
-              </div>
-              <div className="text-sm text-gray-300 mt-1">
-                {main}
-              </div>
-            </div>
-
-            {/* SUB CATEGORIES */}
-            {Object.entries(subs).map(([sub, items]) => {
-              if (!items.length) return null;
-
-              return (
-                <button
-                  key={`${main}-${sub}`}
-                  onClick={() => navigate(`/shop/${main}/${sub}`)}
-                  className="block w-full text-left bg-yellow-500/10 p-3 rounded mb-2"
-                >
-                  {sub} ({items.length})
-                </button>
-              );
-            })}
-
-          </div>
-        ))}
+        <button
+          onClick={() => setActiveTab("bookings")}
+          className={`flex-1 p-2 rounded ${
+            activeTab === "bookings" ? "bg-blue-500 text-black" : "bg-white/10"
+          }`}
+        >
+          📄 Bookings
+        </button>
       </div>
 
-      {/* 📄 BOOKINGS */}
-      <div className="bg-white/10 p-4 rounded mb-6">
-        <h2>My Bookings</h2>
+      {/* 🛒 PRODUCTS TAB */}
+      {activeTab === "products" && (
+        <div>
+          {Object.entries(filteredProductsMap).map(([main, subs]) => (
+            <div key={main} className="mb-6">
 
-        {filteredBookings.map((b) => (
-          <BookingItem
-            key={b.id}
-            booking={b}
-            onDelete={handleDeleteBooking}
-          />
-        ))}
-      </div>
+              <CategoryHeader
+                icon={categoryIcons[main]?.icon || "📦"}
+                title={main}
+              />
 
-      {/* 🔴 LIVE WORKERS */}
-      <div className="mb-6">
-        <h2 className="text-green-400">🔴 Live Workers</h2>
+              {Object.entries(subs).map(([sub, items]) => {
+                if (!items.length) return null;
 
-        {Object.entries(filteredWorkersMap).map(([main, subs]) => (
-          <div key={main} className="mb-6">
+                return (
+                  <SubCategoryButton
+                    key={sub}
+                    label={sub}
+                    count={items.length}
+                    color="bg-yellow-500/10"
+                    onClick={() => navigate(`/shop/${main}/${sub}`)}
+                  />
+                );
+              })}
 
-            {/* MAIN CATEGORY ICON + TEXT */}
-            <div className="flex flex-col items-center mb-4">
-              <div className="text-4xl">
-                {categoryIcons[main]?.icon || "📦"}
-              </div>
-              <div className="text-sm text-gray-300 mt-1">
-                {main}
-              </div>
             </div>
+          ))}
+        </div>
+      )}
 
-            {/* SUB CATEGORIES */}
-            {Object.entries(subs).map(([sub, workers]) => {
-              if (!workers.length) return null;
+      {/* 🔴 WORKERS TAB */}
+      {activeTab === "workers" && (
+        <div>
+          {Object.entries(filteredWorkersMap).map(([main, subs]) => (
+            <div key={main} className="mb-6">
 
-              return (
-                <div key={`${main}-${sub}`}>
+              <CategoryHeader
+                icon={categoryIcons[main]?.icon || "📦"}
+                title={main}
+              />
 
-                  <button
-                    onClick={() =>
-                      navigate(`/live/${main}/${sub}`)
-                    }
-                    className="block w-full text-left bg-green-500/10 p-3 rounded mb-2"
-                  >
-                    {sub} ({workers.length} live)
-                  </button>
+              {Object.entries(subs).map(([sub, workers]) => {
+                if (!workers.length) return null;
 
-                  {/* GENERAL HIRE BUTTON */}
-                  {main === "General" &&
-                    sub === "General Workers" &&
-                    workers.map((w) => (
-                      <div
-                        key={w.id}
-                        className="flex justify-between items-center bg-black p-2 mb-2 rounded"
-                      >
-                        <span>{w.name || "General Worker"}</span>
+                return (
+                  <div key={sub}>
+                    <SubCategoryButton
+                      label={sub}
+                      count={workers.length}
+                      color="bg-green-500/10"
+                      onClick={() => navigate(`/live/${main}/${sub}`)}
+                    />
 
-                        <button
-                          onClick={() => navigate(`/hire/${w.id}`)}
-                          className="bg-blue-500 px-3 py-1 rounded"
+                    {main === "General" &&
+                      sub === "General Workers" &&
+                      workers.map((w) => (
+                        <div
+                          key={w.id}
+                          className="flex justify-between items-center bg-black p-2 mb-2 rounded"
                         >
-                          Hire
-                        </button>
-                      </div>
-                    ))}
-                </div>
-              );
-            })}
+                          <span>{w.name || "General Worker"}</span>
 
-          </div>
-        ))}
-      </div>
+                          <button
+                            onClick={() => navigate(`/hire/${w.id}`)}
+                            className="bg-blue-500 px-3 py-1 rounded"
+                          >
+                            Hire
+                          </button>
+                        </div>
+                      ))}
+                  </div>
+                );
+              })}
+
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* 📄 BOOKINGS TAB */}
+      {activeTab === "bookings" && (
+        <div className="bg-white/10 p-4 rounded">
+          {filteredBookings.map((b) => (
+            <BookingItem
+              key={b.id}
+              booking={b}
+              onDelete={handleDeleteBooking}
+            />
+          ))}
+        </div>
+      )}
 
     </div>
   );
