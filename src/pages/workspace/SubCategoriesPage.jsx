@@ -3,7 +3,6 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { FaArrowLeft, FaUsers } from "react-icons/fa";
 
-// Import your BUSINESS_CATEGORIES (same as in BuyerWorkspace)
 const BUSINESS_CATEGORIES = {
   "Handwork & Skilled Workers": ["Carpenter","Plumber","Electrician","Mechanic","Welder","Tailor","Painter","Bricklayer","Barber","Hair Stylist","Technician","AC Repair","Phone Repair","Computer Repair","Solar Installer","CCTV Installer","Furniture Maker","Tiler","POP Installer","Generator Repair","Aluminum Worker","Glass Worker","Iron Bender"],
   "Food & Restaurant": ["Restaurant","Fast Food","Food Vendor","Catering","Bakery","Cake Shop","Drinks Vendor","Shawarma","Pizza Shop","Coffee Shop","Local Kitchen","Barbecue","Seafood Restaurant","Ice Cream Shop"],
@@ -18,7 +17,7 @@ const BUSINESS_CATEGORIES = {
   "Home & Personal Services": ["Laundry","Dry Cleaning","Cleaning Service","Caregiver","Security Guard","Gardening","Pest Control","Home Chef","Housekeeping"],
   "Agriculture & Farming": ["Poultry","Fish Farm","Livestock","Crop Farming","Farm Produce Seller","Palm Oil Business","Vegetable Farming","Rice Farming"],
   "Wholesale & Trade": ["Wholesale","Distributor","Importer","Exporter","Online Store","General Merchant","Market Seller","E-commerce Seller"],
-  "Other Business": ["Other"]
+  "Other Business": ["Other"],
 };
 
 export default function SubCategoriesPage() {
@@ -39,63 +38,70 @@ export default function SubCategoriesPage() {
     try {
       setLoading(true);
 
-      // Get the official subcategories for this main category
       const officialSubs = BUSINESS_CATEGORIES[mainCategory] || [];
-
-      // Get live workers
-      const { data: liveData } = await supabase
-        .from("live_workers")
-        .select("service, worker_id");
-
-      const workerIds = liveData?.map(w => w.worker_id) || [];
-
-      let categoryMap = {};
-      if (workerIds.length > 0) {
-        const { data: workersData } = await supabase
-          .from("workers")
-          .select("id, category")
-          .in("id", workerIds);
-
-        (workersData || []).forEach(w => {
-          categoryMap[w.id] = w.category;
-        });
+      if (officialSubs.length === 0) {
+        setSubCategories([]);
+        setLoading(false);
+        return;
       }
 
-      // Count only subcategories that belong to this main category
+      // Get all live workers
+      const { data: liveData, error: liveError } = await supabase
+        .from("live_workers")
+        .select("worker_id");
+
+      if (liveError) throw liveError;
+
+      const workerIds = (liveData || []).map(w => w.worker_id);
+      if (workerIds.length === 0) {
+        setSubCategories([]);
+        setLoading(false);
+        return;
+      }
+
+      // Get categories of live workers
+      const { data: workersData, error: workersError } = await supabase
+        .from("workers")
+        .select("id, category")
+        .in("id", workerIds);
+
+      if (workersError) throw workersError;
+
+      // Count workers per subcategory that belong to this main category
       const countMap = {};
-      (liveData || []).forEach(w => {
-        const subCat = categoryMap[w.worker_id] || w.service;
-        if (subCat && officialSubs.includes(subCat)) {
-          countMap[subCat] = (countMap[subCat] || 0) + 1;
+      (workersData || []).forEach(w => {
+        if (w.category && officialSubs.includes(w.category)) {
+          countMap[w.category] = (countMap[w.category] || 0) + 1;
         }
       });
 
-      // Format result (only show subs that have at least 1 live worker)
+      // Format and sort by most live first
       const formatted = Object.entries(countMap)
         .map(([name, count]) => ({ name, count }))
-        .sort((a, b) => b.count - a.count); // Sort by most live first
+        .sort((a, b) => b.count - a.count);
 
       setSubCategories(formatted);
     } catch (err) {
-      console.error(err);
+      console.error("fetchSubCategoriesWithCount error:", err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#0f0f0f] flex items-center justify-center text-white">
-        <div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
+  if (loading) return (
+    <div className="min-h-screen bg-[#0f0f0f] flex items-center justify-center text-white">
+      <div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-[#0f0f0f] text-white p-4 pb-24">
       <div className="flex items-center gap-3 mb-8">
-        <button onClick={() => navigate(-1)} className="p-2 hover:bg-white/10 rounded-full">
-          <FaArrowLeft size={24} />
+        <button
+          onClick={() => navigate(-1)}
+          className="p-2 hover:bg-white/10 rounded-full transition"
+        >
+          <FaArrowLeft size={20} />
         </button>
         <div>
           <h1 className="text-2xl font-bold">{mainCategory}</h1>
@@ -106,7 +112,13 @@ export default function SubCategoriesPage() {
       {subCategories.length === 0 ? (
         <div className="text-center py-20 text-gray-400">
           <p className="text-5xl mb-4">😔</p>
-          <p>No live workers available in this category yet</p>
+          <p>No live workers in this category yet</p>
+          <button
+            onClick={() => navigate("/workspace")}
+            className="mt-4 text-green-400 text-sm underline"
+          >
+            Back to Workspace
+          </button>
         </div>
       ) : (
         <div className="space-y-3">
