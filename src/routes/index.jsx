@@ -28,6 +28,7 @@ import Settings from "../pages/settings/Settings";
 import SellerProfile from "../pages/profile/SellerProfile";
 import BuyerProfile from "../pages/profile/BuyerProfile";
 import ProductCatalogue from "../pages/workspace/ProductCatalouge";
+import SubCategoriesPage from "../pages/workspace/SubCategoriesPage";
 import ProductDetail from "../pages/workspace/ProductDetails";
 import BrowseCategories from "../pages/workspace/BrowseCategories";
 
@@ -81,9 +82,30 @@ export default function AppRoutes() {
     <BrowserRouter>
       <Routes>
         {/* Public Routes */}
-        <Route path="/" element={<PublicRoute><Landing /></PublicRoute>} />
-        <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
-        <Route path="/signup" element={<PublicRoute><Signup /></PublicRoute>} />
+        <Route
+          path="/"
+          element={
+            <PublicRoute>
+              <Landing />
+            </PublicRoute>
+          }
+        />
+        <Route
+          path="/login"
+          element={
+            <PublicRoute>
+              <Login />
+            </PublicRoute>
+          }
+        />
+        <Route
+          path="/signup"
+          element={
+            <PublicRoute>
+              <Signup />
+            </PublicRoute>
+          }
+        />
         <Route path="/reset-password" element={<ResetPassword />} />
 
         {/* Reels */}
@@ -116,6 +138,17 @@ export default function AppRoutes() {
             <ProtectedRoute allowedRoles={["client"]}>
               <MainLayout>
                 <BuyerProfile />
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/subcategories"
+          element={
+            <ProtectedRoute allowedRoles={["client"]}>
+              <MainLayout>
+                <SubCategoriesPage />
               </MainLayout>
             </ProtectedRoute>
           }
@@ -164,17 +197,17 @@ export default function AppRoutes() {
             </ProtectedRoute>
           }
         />
-        
+
         <Route
-  path="/browse-categories"
-  element={
-    <ProtectedRoute allowedRoles={["client"]}>
-      <MainLayout>
-        <BrowseCategories />
-      </MainLayout>
-    </ProtectedRoute>
-  }
-/>
+          path="/browse-categories"
+          element={
+            <ProtectedRoute allowedRoles={["client"]}>
+              <MainLayout>
+                <BrowseCategories />
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
 
         {/* Shop Routes — NEW */}
         <Route

@@ -73,37 +73,15 @@ export default function BuyerWorkspace() {
   };
 
   const filteredRecent = useMemo(() =>
-    recentSubcategories.filter(c => 
-      c.toLowerCase().includes(search.toLowerCase())
-    ),
+    recentSubcategories.filter(c => c.toLowerCase().includes(search.toLowerCase())),
     [recentSubcategories, search]
   );
-
-  // Function to navigate to hire-worker with multiple subcategories
-  const handleMainCategoryClick = (mainCat) => {
-    const subcategories = BUSINESS_CATEGORIES[mainCat] || [];
-    if (subcategories.length === 0) {
-      navigate(`/hire-worker`);
-      return;
-    }
-    
-    // Join subcategories with comma for HireWorker to handle
-    const subsParam = subcategories.join(",");
-    navigate(`/hire-worker?category=${encodeURIComponent(subsParam)}`);
-  };
-
-  if (loading) {
-    return <div className="text-white text-center mt-20">Loading workspace...</div>;
-  }
 
   return (
     <div className="min-h-screen bg-[#0f0f0f] text-white p-4 pb-24">
       {/* HEADER */}
       <div className="flex justify-between items-center mb-6">
-        <FaClipboardList 
-          className="cursor-pointer" 
-          onClick={() => navigate("/productorder")} 
-        />
+        <FaClipboardList className="cursor-pointer" onClick={() => navigate("/productorder")} />
         <h1 className="text-xl font-semibold">Workspace</h1>
         <FaBell />
       </div>
@@ -118,7 +96,7 @@ export default function BuyerWorkspace() {
         />
       </div>
 
-      {/* BUSINESS STATUS */}
+      {/* RECENT BUSINESS STATUS */}
       <div className="mb-8">
         <h2 className="mb-3 font-semibold">Business Status</h2>
         <div className="flex gap-4 overflow-x-auto pb-2">
@@ -137,14 +115,14 @@ export default function BuyerWorkspace() {
         </div>
       </div>
 
-      {/* LIVE BUSINESS - Main Categories */}
+      {/* LIVE BUSINESS - Goes to Sub Categories Page */}
       <div className="mb-8">
         <h2 className="mb-3 font-semibold">Live Business</h2>
         <div className="grid grid-cols-3 gap-4">
           {Object.keys(BUSINESS_CATEGORIES).map((mainCat) => (
             <button
               key={mainCat}
-              onClick={() => handleMainCategoryClick(mainCat)}
+              onClick={() => navigate(`/subcategories?main=${encodeURIComponent(mainCat)}`)}
               className="bg-[#1a1a1a] p-4 rounded-xl flex flex-col items-center hover:bg-[#242424] transition"
             >
               <div className="text-2xl mb-2">
