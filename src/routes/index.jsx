@@ -30,6 +30,7 @@ import BuyerProfile from "../pages/profile/BuyerProfile";
 import ProductCatalogue from "../pages/workspace/ProductCatalouge";
 import SubCategoriesPage from "../pages/workspace/SubCategoriesPage";
 import ProductDetail from "../pages/workspace/ProductDetails";
+import Tracking from "../pages/workspace/Tracking";
 import BrowseCategories from "../pages/workspace/BrowseCategories";
 
 // ============ PROTECTED ROUTE ============
