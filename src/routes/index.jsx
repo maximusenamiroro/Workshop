@@ -253,6 +253,16 @@ export default function AppRoutes() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/seller-profile/:id"
+          element={
+            <ProtectedRoute allowedRoles={["client", "worker"]}>
+              <MainLayout>
+                <SellerProfile />
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
 
         <Route
           path="/create-reel"
@@ -309,12 +319,15 @@ export default function AppRoutes() {
           }
         />
 
-       <Route path="/tracking/:bookingId" element={
-  <ProtectedRoute allowedRoles={["client"]}>
-    <Tracking />
-  </ProtectedRoute>
-} />
-      
+        <Route
+          path="/tracking/:bookingId"
+          element={
+            <ProtectedRoute allowedRoles={["client"]}>
+              <Tracking />
+            </ProtectedRoute>
+          }
+        />
+
         <Route
           path="/seller-settings"
           element={
