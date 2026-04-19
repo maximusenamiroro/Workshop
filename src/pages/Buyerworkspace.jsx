@@ -38,16 +38,24 @@ const BUSINESS_CATEGORIES = {
   "Other Business": ["Other"],
 };
 
+const getBookingColor = (status) => {
+  switch (status) {
+    case "accepted": return "bg-green-500/20 text-green-400";
+    case "rejected": return "bg-red-500/20 text-red-400";
+    default: return "bg-yellow-500/20 text-yellow-400";
+  }
+};
+
 export default function BuyerWorkspace() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
   const [search, setSearch] = useState("");
   const [recentProducts, setRecentProducts] = useState([]);
+  const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(Date.now());
 
-  // Clock for countdown
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 60000);
     return () => clearInterval(timer);
@@ -56,18 +64,28 @@ export default function BuyerWorkspace() {
   useEffect(() => {
     if (!user) return;
     fetchAll();
+
+    // Real-time bookings
+    const bookingsChannel = supabase
+      .channel(`workspace_bookings_${user.id}`)
+      .on("postgres_changes", {
+        event: "*", schema: "public",
+        table: "hire_requests",
+        filter: `client_id=eq.${user.id}`,
+      }, fetchBookings)
+      .subscribe();
+
+    return () => supabase.removeChannel(bookingsChannel);
   }, [user]);
 
   const fetchAll = async () => {
-    await fetchRecentProducts();
+    await Promise.all([fetchRecentProducts(), fetchBookings()]);
     setLoading(false);
   };
 
   const fetchRecentProducts = async () => {
     try {
-      // Only fetch products uploaded in last 24 hours
       const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-
       const { data, error } = await supabase
         .from("products")
         .select("id, title, category, created_at, image_url")
@@ -85,6 +103,25 @@ export default function BuyerWorkspace() {
       setRecentProducts(withCountdown);
     } catch (err) {
       console.error("Failed to fetch recent products:", err.message);
+    }
+  };
+
+  const fetchBookings = async () => {
+    try {
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser) return;
+
+      const { data, error } = await supabase
+        .from("hire_requests")
+        .select("id, status, created_at, job_description, location, worker_id")
+        .eq("client_id", currentUser.id)
+        .order("created_at", { ascending: false })
+        .limit(5);
+
+      if (error) throw error;
+      setBookings(data || []);
+    } catch (err) {
+      console.error("fetchBookings failed:", err.message);
     }
   };
 
@@ -139,23 +176,14 @@ export default function BuyerWorkspace() {
               24h only
             </span>
           </h2>
-          {/* <button
-            onClick={() => navigate("/shop")}
-            className="text-xs text-green-400"
-          >
+          <button onClick={() => navigate("/shop")} className="text-xs text-green-400">
             See All →
-          </button> */}
+          </button>
         </div>
 
         {recentProducts.length === 0 ? (
           <div className="bg-white/5 rounded-xl p-4 text-center">
-            <p className="text-gray-400 text-sm mb-2">No new products in last 24 hours</p>
-            {/* <button
-              onClick={() => navigate("/shop")}
-              className="text-green-400 text-sm underline"
-            >
-              Browse all products
-            </button> */}
+            <p className="text-gray-400 text-sm">No new products in last 24 hours</p>
           </div>
         ) : (
           <div className="flex gap-4 overflow-x-auto pb-3">
@@ -187,6 +215,44 @@ export default function BuyerWorkspace() {
           </div>
         )}
       </div>
+
+      {/* MY BOOKINGS */}
+      {bookings.length > 0 && (
+        <div className="mb-8 bg-white/5 p-4 rounded-xl">
+          <div className="flex justify-between items-center mb-3">
+            <h2 className="font-semibold">My Bookings</h2>
+            <button
+              onClick={() => navigate("/booking-dashboard")}
+              className="text-xs text-green-400"
+            >
+              View All →
+            </button>
+          </div>
+          <div className="space-y-2">
+            {bookings.slice(0, 2).map((b) => (
+              <div key={b.id} className="flex justify-between items-center py-2 border-b border-white/10">
+                <div className="flex-1">
+                  <p className="text-sm truncate">{b.job_description || "Job Request"}</p>
+                  <p className="text-xs text-gray-400">📍 {b.location}</p>
+                </div>
+                <div className="flex items-center gap-2 ml-2">
+                  <span className={`text-xs px-2 py-1 rounded-full whitespace-nowrap ${getBookingColor(b.status)}`}>
+                    {b.status || "pending"}
+                  </span>
+                  {b.status === "accepted" && (
+                    <button
+                      onClick={() => navigate(`/tracking/${b.id}`)}
+                      className="text-xs bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-full transition whitespace-nowrap"
+                    >
+                      📍 Track
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* LIVE BUSINESS */}
       <div className="mb-8">

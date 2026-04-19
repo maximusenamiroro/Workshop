@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   FaBell, FaToggleOn, FaToggleOff,
   FaTrash, FaPlus, FaSearch, FaClipboardList,
@@ -30,6 +30,7 @@ const formatDate = (dateStr) =>
 export default function SellerWorkstation() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const geoWatchRef = useRef(null);
 
   const [products, setProducts] = useState([]);
   const [bookings, setBookings] = useState([]);
@@ -49,6 +50,15 @@ export default function SellerWorkstation() {
     file: null,
   });
 
+  // Clean up GPS on unmount
+  useEffect(() => {
+    return () => {
+      if (geoWatchRef.current) {
+        navigator.geolocation.clearWatch(geoWatchRef.current);
+      }
+    };
+  }, []);
+
   useEffect(() => {
     if (!user) return;
     fetchAll();
@@ -62,7 +72,6 @@ export default function SellerWorkstation() {
       }, fetchBookings)
       .subscribe();
 
-    // Real-time product orders
     const ordersChannel = supabase
       .channel(`workstation_orders_${user.id}`)
       .on("postgres_changes", {
@@ -132,34 +141,94 @@ export default function SellerWorkstation() {
     );
   };
 
+  // ================= TOGGLE LIVE WITH GPS =================
   const toggleLive = async () => {
     setLiveLoading(true);
     try {
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       if (!currentUser) throw new Error("Not authenticated");
       const finalService = resolveCategory(service);
+
       if (isLive) {
+        // Stop GPS tracking
+        if (geoWatchRef.current) {
+          navigator.geolocation.clearWatch(geoWatchRef.current);
+          geoWatchRef.current = null;
+        }
         const { error } = await supabase
           .from("live_workers")
           .delete()
           .eq("worker_id", currentUser.id);
         if (error) throw error;
         setIsLive(false);
+        setLiveLoading(false);
       } else {
-        const { error } = await supabase
-          .from("live_workers")
-          .upsert({
-            worker_id: currentUser.id,
-            service: finalService,
-            updated_at: new Date().toISOString(),
-          });
-        if (error) throw error;
-        setIsLive(true);
-        setService(finalService);
+        // Check if geolocation is available
+        if (!navigator.geolocation) {
+          alert("Geolocation is not supported by your browser");
+          setLiveLoading(false);
+          return;
+        }
+
+        // Get initial GPS position
+        navigator.geolocation.getCurrentPosition(
+          async (pos) => {
+            try {
+              const { error } = await supabase
+                .from("live_workers")
+                .upsert({
+                  worker_id: currentUser.id,
+                  service: finalService,
+                  lat: pos.coords.latitude,
+                  lng: pos.coords.longitude,
+                  last_seen: new Date().toISOString(),
+                  updated_at: new Date().toISOString(),
+                });
+              if (error) throw error;
+
+              setIsLive(true);
+              setService(finalService);
+
+              // Start watching GPS position
+              geoWatchRef.current = navigator.geolocation.watchPosition(
+                async (position) => {
+                  try {
+                    await supabase
+                      .from("live_workers")
+                      .update({
+                        lat: position.coords.latitude,
+                        lng: position.coords.longitude,
+                        last_seen: new Date().toISOString(),
+                      })
+                      .eq("worker_id", currentUser.id);
+                  } catch (err) {
+                    console.error("GPS update error:", err.message);
+                  }
+                },
+                (err) => console.error("GPS watch error:", err),
+                {
+                  enableHighAccuracy: true,
+                  maximumAge: 5000,
+                  timeout: 10000,
+                }
+              );
+            } catch (err) {
+              alert("Failed to go live: " + err.message);
+            } finally {
+              setLiveLoading(false);
+            }
+          },
+          (err) => {
+            console.error("GPS error:", err);
+            alert("Please allow location access to go live. This is needed so clients can track you.");
+            setLiveLoading(false);
+          },
+          { enableHighAccuracy: true, timeout: 15000 }
+        );
+        return; // Return early — loading handled in GPS callback
       }
     } catch (err) {
       alert("Failed: " + err.message);
-    } finally {
       setLiveLoading(false);
     }
   };
@@ -179,13 +248,11 @@ export default function SellerWorkstation() {
     }
   };
 
-  // Fetch orders for worker's products
   const fetchProductOrders = async () => {
     try {
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       if (!currentUser) return;
 
-      // Get all product IDs belonging to this worker
       const { data: workerProducts } = await supabase
         .from("products")
         .select("id")
@@ -198,16 +265,14 @@ export default function SellerWorkstation() {
 
       const productIds = workerProducts.map(p => p.id);
 
-      // Get orders for those products
       const { data: ordersData, error } = await supabase
         .from("orders")
-        .select("id, product_name, product_image_url, status, created_at, user_id, quantity, total_amount")
+        .select("id, product_name, product_image_url, status, created_at, user_id, quantity, total_amount, product_id")
         .in("product_id", productIds)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
 
-      // Get buyer names
       const buyerIds = [...new Set((ordersData || []).map(o => o.user_id).filter(Boolean))];
       let buyerMap = {};
       if (buyerIds.length > 0) {
@@ -354,6 +419,11 @@ export default function SellerWorkstation() {
       {/* LIVE SYSTEM */}
       <div className="bg-white/5 p-4 rounded-xl">
         <p className="text-sm mb-2 text-gray-400">Go Live (clients can see you)</p>
+        {isLive && (
+          <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-2 mb-3 text-xs text-green-400">
+            📡 GPS is active — your location is being shared with clients
+          </div>
+        )}
         <select
           value={service}
           onChange={(e) => setService(e.target.value)}
@@ -419,7 +489,6 @@ export default function SellerWorkstation() {
                 </span>
               </div>
 
-              {/* Update order status */}
               <div className="flex gap-2 mt-2 flex-wrap">
                 {["shipping", "on the way", "arriving", "delivered"].map(s => (
                   <button
@@ -436,7 +505,6 @@ export default function SellerWorkstation() {
                 ))}
               </div>
 
-              {/* Message buyer */}
               <button
                 onClick={() => navigate(`/inbox?user=${o.user_id}`)}
                 className="w-full mt-2 bg-white/10 hover:bg-white/20 py-1.5 rounded-lg text-xs transition"

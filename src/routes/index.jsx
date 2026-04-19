@@ -22,7 +22,6 @@ import HireWorker from "../pages/workspace/Hireworker";
 import ProductOrders from "../pages/workspace/Productorder";
 import LiveServices from "../pages/workspace/LiveService";
 import Tracking from "../pages/workspace/Tracking";
-import TrackingDashboard from "../pages/workspace/trackingdashboard";
 import Sellersetting from "../pages/settings/sellersSetting";
 import Settings from "../pages/settings/Settings";
 import SellerProfile from "../pages/profile/SellerProfile";
@@ -30,7 +29,6 @@ import BuyerProfile from "../pages/profile/BuyerProfile";
 import ProductCatalogue from "../pages/workspace/ProductCatalouge";
 import SubCategoriesPage from "../pages/workspace/SubCategoriesPage";
 import ProductDetail from "../pages/workspace/ProductDetails";
-import Tracking from "../pages/workspace/Tracking";
 import BrowseCategories from "../pages/workspace/BrowseCategories";
 
 // ============ PROTECTED ROUTE ============
@@ -311,28 +309,12 @@ export default function AppRoutes() {
           }
         />
 
-        <Route
-          path="/tracking"
-          element={
-            <ProtectedRoute allowedRoles={["client"]}>
-              <MainLayout>
-                <Tracking />
-              </MainLayout>
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/tracking-dashboard"
-          element={
-            <ProtectedRoute allowedRoles={["client"]}>
-              <MainLayout>
-                <TrackingDashboard />
-              </MainLayout>
-            </ProtectedRoute>
-          }
-        />
-
+       <Route path="/tracking/:bookingId" element={
+  <ProtectedRoute allowedRoles={["client"]}>
+    <Tracking />
+  </ProtectedRoute>
+} />
+      
         <Route
           path="/seller-settings"
           element={

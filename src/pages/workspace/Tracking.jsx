@@ -9,14 +9,16 @@ import "leaflet/dist/leaflet.css";
 // Fix leaflet default marker icons
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+  iconRetinaUrl:
+    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
   iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
   shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
 });
 
 // Custom worker marker (green)
 const workerIcon = new L.Icon({
-  iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png",
+  iconUrl:
+    "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png",
   shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
   iconSize: [25, 41],
   iconAnchor: [12, 41],
@@ -26,7 +28,8 @@ const workerIcon = new L.Icon({
 
 // Custom client marker (blue)
 const clientIcon = new L.Icon({
-  iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png",
+  iconUrl:
+    "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png",
   shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
   iconSize: [25, 41],
   iconAnchor: [12, 41],
@@ -58,9 +61,9 @@ function calculateDistance(lat1, lng1, lat2, lng2) {
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos((lat1 * Math.PI) / 180) *
-    Math.cos((lat2 * Math.PI) / 180) *
-    Math.sin(dLng / 2) *
-    Math.sin(dLng / 2);
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return (R * c).toFixed(2);
 }
@@ -96,7 +99,8 @@ export default function Tracking() {
 
       if (error) throw error;
       if (!data) throw new Error("Booking not found");
-      if (data.status !== "accepted") throw new Error("Booking is not accepted yet");
+      if (data.status !== "accepted")
+        throw new Error("Booking is not accepted yet");
 
       setBooking(data);
 
@@ -158,7 +162,7 @@ export default function Tracking() {
         console.error("Client GPS error:", err);
         setError("Please allow location access to track the worker");
       },
-      { enableHighAccuracy: true }
+      { enableHighAccuracy: true },
     );
 
     // Watch client position
@@ -170,7 +174,7 @@ export default function Tracking() {
         });
       },
       (err) => console.error("GPS watch error:", err),
-      { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 },
     );
 
     return () => {
@@ -186,18 +190,22 @@ export default function Tracking() {
 
     const channel = supabase
       .channel(`tracking_${booking.worker_id}`)
-      .on("postgres_changes", {
-        event: "UPDATE",
-        schema: "public",
-        table: "live_workers",
-        filter: `worker_id=eq.${booking.worker_id}`,
-      }, (payload) => {
-        const { lat, lng, last_seen } = payload.new;
-        if (lat && lng) {
-          setWorkerLocation({ lat, lng });
-          setLastSeen(last_seen);
-        }
-      })
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "live_workers",
+          filter: `worker_id=eq.${booking.worker_id}`,
+        },
+        (payload) => {
+          const { lat, lng, last_seen } = payload.new;
+          if (lat && lng) {
+            setWorkerLocation({ lat, lng });
+            setLastSeen(last_seen);
+          }
+        },
+      )
       .subscribe();
 
     return () => supabase.removeChannel(channel);
@@ -210,7 +218,7 @@ export default function Tracking() {
         clientLocation.lat,
         clientLocation.lng,
         workerLocation.lat,
-        workerLocation.lng
+        workerLocation.lng,
       );
       setDistance(dist);
     }
@@ -229,36 +237,43 @@ export default function Tracking() {
     if (!dist) return null;
     const d = parseFloat(dist);
     if (d < 0.1) return { label: "Very close!", color: "text-green-400" };
-    if (d < 1) return { label: `${(d * 1000).toFixed(0)}m away`, color: "text-green-400" };
+    if (d < 1)
+      return {
+        label: `${(d * 1000).toFixed(0)}m away`,
+        color: "text-green-400",
+      };
     if (d < 5) return { label: `${d} km away`, color: "text-yellow-400" };
     return { label: `${d} km away`, color: "text-red-400" };
   };
 
   // Loading state
-  if (loading) return (
-    <div className="min-h-screen bg-[#0f0f0f] flex flex-col items-center justify-center text-white gap-3">
-      <div className="w-10 h-10 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
-      <p className="text-gray-400 text-sm">Loading tracking...</p>
-    </div>
-  );
+  if (loading)
+    return (
+      <div className="min-h-screen bg-[#0f0f0f] flex flex-col items-center justify-center text-white gap-3">
+        <div className="w-10 h-10 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+        <p className="text-gray-400 text-sm">Loading tracking...</p>
+      </div>
+    );
 
   // Error state
-  if (error) return (
-    <div className="min-h-screen bg-[#0f0f0f] flex items-center justify-center text-white p-4">
-      <div className="text-center">
-        <p className="text-5xl mb-4">📍</p>
-        <p className="text-red-400 mb-2">{error}</p>
-        <button
-          onClick={() => navigate(-1)}
-          className="mt-4 bg-green-600 px-6 py-2 rounded-xl text-sm"
-        >
-          Go Back
-        </button>
+  if (error)
+    return (
+      <div className="min-h-screen bg-[#0f0f0f] flex items-center justify-center text-white p-4">
+        <div className="text-center">
+          <p className="text-5xl mb-4">📍</p>
+          <p className="text-red-400 mb-2">{error}</p>
+          <button
+            onClick={() => navigate(-1)}
+            className="mt-4 bg-green-600 px-6 py-2 rounded-xl text-sm"
+          >
+            Go Back
+          </button>
+        </div>
       </div>
-    </div>
-  );
+    );
 
-  const mapCenter = workerLocation || clientLocation || { lat: 6.5244, lng: 3.3792 }; // Default Lagos
+  const mapCenter = workerLocation ||
+    clientLocation || { lat: 6.5244, lng: 3.3792 }; // Default Lagos
   const positions = [
     clientLocation && [clientLocation.lat, clientLocation.lng],
     workerLocation && [workerLocation.lat, workerLocation.lng],
@@ -268,7 +283,6 @@ export default function Tracking() {
 
   return (
     <div className="h-screen bg-[#0f0f0f] text-white flex flex-col">
-
       {/* HEADER */}
       <div className="p-4 flex items-center gap-3 border-b border-white/10 z-10 bg-[#0f0f0f]">
         <button
@@ -346,7 +360,9 @@ export default function Tracking() {
                 icon={clientIcon}
               >
                 <Popup>
-                  <div className="text-black font-semibold">📍 You are here</div>
+                  <div className="text-black font-semibold">
+                    📍 You are here
+                  </div>
                 </Popup>
               </Marker>
             )}
