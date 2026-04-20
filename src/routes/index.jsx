@@ -29,6 +29,7 @@ import BuyerProfile from "../pages/profile/BuyerProfile";
 import ProductCatalogue from "../pages/workspace/ProductCatalouge";
 import SubCategoriesPage from "../pages/workspace/SubCategoriesPage";
 import ProductDetail from "../pages/workspace/ProductDetails";
+import SavedReels from "../pages/reels/SavedReels";
 import BrowseCategories from "../pages/workspace/BrowseCategories";
 
 // ============ PROTECTED ROUTE ============
@@ -118,7 +119,16 @@ export default function AppRoutes() {
             </ProtectedRoute>
           }
         />
-
+        <Route
+          path="/saved-reels"
+          element={
+            <ProtectedRoute allowedRoles={["client"]}>
+              <MainLayout>
+                <SavedReels />
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
         {/* Client Routes */}
         <Route
           path="/workspace"
