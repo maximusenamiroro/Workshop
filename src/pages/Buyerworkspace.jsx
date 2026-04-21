@@ -4,6 +4,7 @@ import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 
+// ================= MAIN CATEGORY ICON =================
 const MAIN_CATEGORY_ICON = {
   "Handwork & Skilled Workers": "🛠️",
   "Food & Restaurant": "🍔",
@@ -21,6 +22,7 @@ const MAIN_CATEGORY_ICON = {
   "Other Business": "📦",
 };
 
+// ================= FULL BUSINESS STRUCTURE =================
 const BUSINESS_CATEGORIES = {
   "Handwork & Skilled Workers": ["Carpenter","Plumber","Electrician","Mechanic","Welder","Tailor","Painter","Bricklayer","Barber","Hair Stylist","Technician","AC Repair","Phone Repair","Computer Repair","Solar Installer","CCTV Installer","Furniture Maker","Tiler","POP Installer","Generator Repair","Aluminum Worker","Glass Worker","Iron Bender"],
   "Food & Restaurant": ["Restaurant","Fast Food","Food Vendor","Catering","Bakery","Cake Shop","Drinks Vendor","Shawarma","Pizza Shop","Coffee Shop","Local Kitchen","Barbecue","Seafood Restaurant","Ice Cream Shop"],
@@ -38,21 +40,13 @@ const BUSINESS_CATEGORIES = {
   "Other Business": ["Other"],
 };
 
-const getBookingColor = (status) => {
-  switch (status) {
-    case "accepted": return "bg-green-500/20 text-green-400";
-    case "rejected": return "bg-red-500/20 text-red-400";
-    default: return "bg-yellow-500/20 text-yellow-400";
-  }
-};
-
 export default function BuyerWorkspace() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
   const [search, setSearch] = useState("");
   const [recentProducts, setRecentProducts] = useState([]);
-  const [bookings, setBookings] = useState([]);
+  const [recentSubcategories, setRecentSubcategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(Date.now());
 
@@ -64,36 +58,22 @@ export default function BuyerWorkspace() {
   useEffect(() => {
     if (!user) return;
     fetchAll();
-
-    // Real-time bookings
-    const bookingsChannel = supabase
-      .channel(`workspace_bookings_${user.id}`)
-      .on("postgres_changes", {
-        event: "*", schema: "public",
-        table: "hire_requests",
-        filter: `client_id=eq.${user.id}`,
-      }, fetchBookings)
-      .subscribe();
-
-    return () => supabase.removeChannel(bookingsChannel);
   }, [user]);
 
   const fetchAll = async () => {
-    await Promise.all([fetchRecentProducts(), fetchBookings()]);
+    await Promise.all([fetchRecentProducts(), fetchRecentSubcategories()]);
     setLoading(false);
   };
 
   const fetchRecentProducts = async () => {
     try {
       const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from("products")
         .select("id, title, category, created_at, image_url")
         .gte("created_at", since)
         .order("created_at", { ascending: false })
         .limit(15);
-
-      if (error) throw error;
 
       const withCountdown = (data || []).map(product => ({
         ...product,
@@ -106,22 +86,20 @@ export default function BuyerWorkspace() {
     }
   };
 
-  const fetchBookings = async () => {
+  const fetchRecentSubcategories = async () => {
     try {
-      const { data: { user: currentUser } } = await supabase.auth.getUser();
-      if (!currentUser) return;
+      const { data } = await supabase
+        .from("live_workers")
+        .select("service")
+        .limit(50);
 
-      const { data, error } = await supabase
-        .from("hire_requests")
-        .select("id, status, created_at, job_description, location, worker_id")
-        .eq("client_id", currentUser.id)
-        .order("created_at", { ascending: false })
-        .limit(5);
+      const dynamicServices = (data || []).map(item => item.service).filter(Boolean);
+      const allSub = Object.values(BUSINESS_CATEGORIES).flat();
+      const merged = [...new Set([...dynamicServices, ...allSub])];
 
-      if (error) throw error;
-      setBookings(data || []);
+      setRecentSubcategories(merged);
     } catch (err) {
-      console.error("fetchBookings failed:", err.message);
+      console.error(err);
     }
   };
 
@@ -138,24 +116,38 @@ export default function BuyerWorkspace() {
       c.toLowerCase().includes(search.toLowerCase())
     ), [search]);
 
-  if (loading) return (
-    <div className="min-h-screen bg-[#0f0f0f] flex items-center justify-center text-white">
-      <div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
-    </div>
-  );
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#0f0f0f] flex items-center justify-center text-white">
+        <div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#0f0f0f] text-white p-4 pb-24">
+     {/* HEADER WITH LABELS */}
+<div className="flex justify-between items-center mb-6 px-1">
+  {/* My Orders */}
+  <div 
+    className="flex flex-col items-center cursor-pointer active:opacity-70"
+    onClick={() => navigate("/my-orders")}
+  >
+    <FaClipboardList className="text-white/70 text-2xl" />
+    <span className="text-[10px] text-gray-400 mt-1">Orders</span>
+  </div>
 
-      {/* HEADER */}
-      <div className="flex justify-between items-center mb-6">
-        <FaClipboardList
-          className="cursor-pointer text-white/70"
-          onClick={() => navigate("/productorder")}
-        />
-        <h1 className="text-xl font-semibold">Workspace</h1>
-        <FaBell className="text-white/70" />
-      </div>
+  <h1 className="text-xl font-semibold">Workspace</h1>
+
+  {/* Notifications */}
+  <div 
+    className="flex flex-col items-center cursor-pointer active:opacity-70 relative"
+    onClick={() => navigate("/notifications")}
+  >
+    <FaBell className="text-white/70 text-2xl" />
+    <span className="text-[10px] text-gray-400 mt-1">Alerts</span>
+  </div>
+</div>
 
       {/* SEARCH */}
       <div className="flex items-center bg-white/5 p-2 rounded-xl mb-6">
@@ -195,18 +187,12 @@ export default function BuyerWorkspace() {
               >
                 <div className="w-20 h-20 bg-gray-800 rounded-xl flex items-center justify-center text-4xl mb-2 overflow-hidden">
                   {product.image_url ? (
-                    <img
-                      src={product.image_url}
-                      alt={product.title}
-                      className="w-full h-full object-cover rounded-xl"
-                    />
+                    <img src={product.image_url} alt={product.title} className="w-full h-full object-cover rounded-xl" />
                   ) : (
                     <span>📦</span>
                   )}
                 </div>
-                <p className="text-xs font-medium text-center line-clamp-2 h-9">
-                  {product.title}
-                </p>
+                <p className="text-xs font-medium text-center line-clamp-2 h-9">{product.title}</p>
                 <p className="text-[10px] text-green-400 mt-1">
                   ⏳ {formatCountdown(product.expiresAt)}
                 </p>
@@ -215,44 +201,6 @@ export default function BuyerWorkspace() {
           </div>
         )}
       </div>
-
-      {/* MY BOOKINGS */}
-      {bookings.length > 0 && (
-        <div className="mb-8 bg-white/5 p-4 rounded-xl">
-          <div className="flex justify-between items-center mb-3">
-            <h2 className="font-semibold">My Bookings</h2>
-            <button
-              onClick={() => navigate("/booking-dashboard")}
-              className="text-xs text-green-400"
-            >
-              View All →
-            </button>
-          </div>
-          <div className="space-y-2">
-            {bookings.slice(0, 2).map((b) => (
-              <div key={b.id} className="flex justify-between items-center py-2 border-b border-white/10">
-                <div className="flex-1">
-                  <p className="text-sm truncate">{b.job_description || "Job Request"}</p>
-                  <p className="text-xs text-gray-400">📍 {b.location}</p>
-                </div>
-                <div className="flex items-center gap-2 ml-2">
-                  <span className={`text-xs px-2 py-1 rounded-full whitespace-nowrap ${getBookingColor(b.status)}`}>
-                    {b.status || "pending"}
-                  </span>
-                  {b.status === "accepted" && (
-                    <button
-                      onClick={() => navigate(`/tracking/${b.id}`)}
-                      className="text-xs bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-full transition whitespace-nowrap"
-                    >
-                      📍 Track
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* LIVE BUSINESS */}
       <div className="mb-8">

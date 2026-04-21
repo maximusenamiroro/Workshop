@@ -19,7 +19,6 @@ import Bookings from "../pages/workstation/Bookings";
 import LiveService from "../pages/workstation/LiveService";
 import BookingDashboard from "../pages/workspace/bookingdashborad";
 import HireWorker from "../pages/workspace/Hireworker";
-import ProductOrders from "../pages/workspace/Productorder";
 import LiveServices from "../pages/workspace/LiveService";
 import Tracking from "../pages/workspace/Tracking";
 import Sellersetting from "../pages/settings/sellersSetting";
@@ -31,6 +30,7 @@ import SubCategoriesPage from "../pages/workspace/SubCategoriesPage";
 import ProductDetail from "../pages/workspace/ProductDetails";
 import SavedReels from "../pages/reels/SavedReels";
 import BrowseCategories from "../pages/workspace/BrowseCategories";
+import MyOrders from "../pages/workspace/Productorder";
 
 // ============ PROTECTED ROUTE ============
 const ProtectedRoute = ({ children, allowedRoles }) => {
@@ -164,11 +164,11 @@ export default function AppRoutes() {
         />
 
         <Route
-          path="/productorder"
+          path="/my-orders"
           element={
             <ProtectedRoute allowedRoles={["client"]}>
               <MainLayout>
-                <ProductOrders />
+                <MyOrders />
               </MainLayout>
             </ProtectedRoute>
           }
