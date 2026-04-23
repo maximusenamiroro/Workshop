@@ -2,11 +2,12 @@ import { useState, useRef, useEffect } from "react";
 import { FaPaperPlane, FaSearch, FaArrowLeft, FaCheck, FaCheckDouble } from "react-icons/fa";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 export default function Inbox() {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const [conversations, setConversations] = useState([]);
   const [activeChat, setActiveChat] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -20,7 +21,6 @@ export default function Inbox() {
     activeChatRef.current = activeChat;
   }, [activeChat]);
 
-  // Handle ?user= param and init
   useEffect(() => {
     if (!user) return;
 
@@ -33,7 +33,7 @@ export default function Inbox() {
       if (targetUserId && targetUserId !== "null" && targetUserId !== "undefined") {
         const { data: profile } = await supabase
           .from("profiles")
-          .select("id, full_name")
+          .select("id, full_name, avatar_url, country, role")
           .eq("id", targetUserId)
           .maybeSingle();
 
@@ -41,6 +41,9 @@ export default function Inbox() {
           const chatObj = {
             id: profile.id,
             name: profile.full_name || "User",
+            avatar_url: profile.avatar_url || null,
+            country: profile.country || null,
+            role: profile.role || null,
             lastMessage: "",
             seen: false,
             unread: 0,
@@ -60,7 +63,7 @@ export default function Inbox() {
     init();
   }, [user, location.search]);
 
-  // Real-time — listen for new messages and update conversation list
+  // Real-time incoming messages
   useEffect(() => {
     if (!user) return;
 
@@ -74,16 +77,10 @@ export default function Inbox() {
       }, async (payload) => {
         const newMsg = payload.new;
 
-        // If chat is open with this sender update messages directly
         if (activeChatRef.current?.id === newMsg.sender_id) {
           setMessages(prev => [...prev, newMsg]);
-          // Mark as seen immediately
-          await supabase
-            .from("messages")
-            .update({ seen: true })
-            .eq("id", newMsg.id);
+          await supabase.from("messages").update({ seen: true }).eq("id", newMsg.id);
         } else {
-          // Otherwise update conversation list with unread badge
           setConversations(prev => {
             const exists = prev.find(c => c.id === newMsg.sender_id);
             if (exists) {
@@ -93,7 +90,6 @@ export default function Inbox() {
                   : c
               );
             } else {
-              // New conversation — fetch profile and add
               fetchConversations();
               return prev;
             }
@@ -125,17 +121,16 @@ export default function Inbox() {
         return;
       }
 
+      // Fetch profiles with avatar and country
       const { data: profiles } = await supabase
         .from("profiles")
-        .select("id, full_name")
+        .select("id, full_name, avatar_url, country, role")
         .in("id", partnerIds);
 
-      // Count unread messages per partner
       const unreadCounts = {};
       (data || []).forEach(m => {
         if (m.receiver_id === user.id && !m.seen) {
-          const partnerId = m.sender_id;
-          unreadCounts[partnerId] = (unreadCounts[partnerId] || 0) + 1;
+          unreadCounts[m.sender_id] = (unreadCounts[m.sender_id] || 0) + 1;
         }
       });
 
@@ -146,6 +141,9 @@ export default function Inbox() {
         return {
           id: profile.id,
           name: profile.full_name || "User",
+          avatar_url: profile.avatar_url || null,
+          country: profile.country || null,
+          role: profile.role || null,
           lastMessage: lastMsg?.text || "",
           seen: lastMsg?.seen || false,
           unread: unreadCounts[profile.id] || 0,
@@ -153,9 +151,7 @@ export default function Inbox() {
         };
       });
 
-      // Sort by latest message
       convos.sort((a, b) => new Date(b.lastTime) - new Date(a.lastTime));
-
       setConversations(convos);
     } catch (err) {
       console.error("Fetch conversations error:", err.message);
@@ -177,7 +173,6 @@ export default function Inbox() {
       if (error) throw error;
       setMessages(data || []);
 
-      // Mark all as seen
       await supabase
         .from("messages")
         .update({ seen: true })
@@ -185,7 +180,6 @@ export default function Inbox() {
         .eq("receiver_id", user.id)
         .eq("seen", false);
 
-      // Clear unread count for this conversation
       setConversations(prev =>
         prev.map(c => c.id === partnerId ? { ...c, unread: 0 } : c)
       );
@@ -221,22 +215,24 @@ export default function Inbox() {
       setMessages(prev => [...prev, data]);
       setMessage("");
 
-      // Update conversation list with latest message
-      setConversations(prev => {
-        const exists = prev.find(c => c.id === activeChat.id);
-        if (exists) {
-          return prev.map(c =>
-            c.id === activeChat.id
-              ? { ...c, lastMessage: data.text, lastTime: data.created_at }
-              : c
-          );
-        }
-        return prev;
-      });
+      setConversations(prev =>
+        prev.map(c =>
+          c.id === activeChat.id
+            ? { ...c, lastMessage: data.text, lastTime: data.created_at }
+            : c
+        )
+      );
     } catch (err) {
       console.error("Send message error:", err.message);
       alert("Failed to send: " + err.message);
     }
+  };
+
+  const goToProfile = (chat) => {
+    if (chat.role === "worker") {
+      navigate(`/seller-profile/${chat.id}`);
+    }
+    // clients don't have a public profile page to navigate to
   };
 
   const renderStatus = (msg) => {
@@ -250,14 +246,23 @@ export default function Inbox() {
 
   const formatLastTime = (dateStr) => {
     if (!dateStr) return "";
-    const date = new Date(dateStr);
-    const now = new Date();
-    const diff = now - date;
+    const diff = Date.now() - new Date(dateStr).getTime();
     if (diff < 60000) return "now";
     if (diff < 3600000) return `${Math.floor(diff / 60000)}m`;
     if (diff < 86400000) return `${Math.floor(diff / 3600000)}h`;
-    return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" });
   };
+
+  // Avatar component
+  const Avatar = ({ name, avatar_url, size = "w-10 h-10", textSize = "text-sm" }) => (
+    <div className={`${size} rounded-full overflow-hidden bg-green-600 flex items-center justify-center font-bold ${textSize} flex-shrink-0`}>
+      {avatar_url ? (
+        <img src={avatar_url} alt={name} className="w-full h-full object-cover" />
+      ) : (
+        <span className="text-white">{name?.[0] || "?"}</span>
+      )}
+    </div>
+  );
 
   const filtered = conversations.filter(c =>
     c.name.toLowerCase().includes(search.toLowerCase())
@@ -267,7 +272,7 @@ export default function Inbox() {
     <div className="flex h-screen bg-[#0f0f0f] text-white overflow-hidden">
 
       {/* CHAT LIST */}
-      <div className={`${activeChat ? "hidden md:flex" : "flex"} flex-col w-full md:w-[30%] border-r border-white/10`}>
+      <div className={`${activeChat ? "hidden md:flex" : "flex"} flex-col w-full md:w-[35%] border-r border-white/10`}>
         <div className="p-4 border-b border-white/10">
           <h2 className="text-lg font-semibold">Inbox</h2>
         </div>
@@ -299,12 +304,8 @@ export default function Inbox() {
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  {/* Avatar */}
                   <div className="relative">
-                    <div className="w-10 h-10 rounded-full bg-green-600 flex items-center justify-center font-bold text-sm">
-                      {chat.name[0]}
-                    </div>
-                    {/* Unread badge */}
+                    <Avatar name={chat.name} avatar_url={chat.avatar_url} />
                     {chat.unread > 0 && (
                       <div className="absolute -top-1 -right-1 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
                         <span className="text-white text-xs font-bold">
@@ -323,6 +324,9 @@ export default function Inbox() {
                         {formatLastTime(chat.lastTime)}
                       </span>
                     </div>
+                    {chat.country && (
+                      <p className="text-[10px] text-gray-500">📍 {chat.country}</p>
+                    )}
                     <p className={`text-xs truncate mt-0.5 ${chat.unread > 0 ? "text-white/80 font-medium" : "text-white/40"}`}>
                       {chat.lastMessage || "No messages yet"}
                     </p>
@@ -338,19 +342,37 @@ export default function Inbox() {
       <div className={`${activeChat ? "flex" : "hidden md:flex"} flex-col flex-1`}>
         {activeChat ? (
           <>
+            {/* Chat header — click profile to navigate */}
             <div className="p-4 border-b border-white/10 flex items-center gap-3">
               <button className="md:hidden" onClick={() => setActiveChat(null)}>
                 <FaArrowLeft />
               </button>
-              <div className="w-10 h-10 rounded-full bg-green-600 flex items-center justify-center font-bold">
-                {activeChat.name[0]}
-              </div>
-              <div>
-                <h2 className="font-semibold">{activeChat.name}</h2>
-                <p className="text-xs text-green-400">Active</p>
-              </div>
+
+              <button
+                onClick={() => goToProfile(activeChat)}
+                className="flex items-center gap-3 flex-1 text-left"
+              >
+                <Avatar
+                  name={activeChat.name}
+                  avatar_url={activeChat.avatar_url}
+                  size="w-10 h-10"
+                />
+                <div>
+                  <h2 className="font-semibold text-white">{activeChat.name}</h2>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs text-green-400">Active</p>
+                    {activeChat.country && (
+                      <p className="text-xs text-gray-500">· 📍 {activeChat.country}</p>
+                    )}
+                    {activeChat.role === "worker" && (
+                      <p className="text-xs text-blue-400">· View Profile →</p>
+                    )}
+                  </div>
+                </div>
+              </button>
             </div>
 
+            {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
               {messages.length === 0 && (
                 <p className="text-center text-gray-500 text-sm mt-10">
@@ -376,6 +398,7 @@ export default function Inbox() {
               <div ref={messagesEndRef} />
             </div>
 
+            {/* Input */}
             <div className="p-3 border-t border-white/10 flex gap-2">
               <input
                 value={message}

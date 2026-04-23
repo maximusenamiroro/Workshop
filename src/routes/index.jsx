@@ -31,6 +31,7 @@ import ProductDetail from "../pages/workspace/ProductDetails";
 import SavedReels from "../pages/reels/SavedReels";
 import BrowseCategories from "../pages/workspace/BrowseCategories";
 import MyOrders from "../pages/workspace/Productorder";
+import NewArrivalsPage from "../pages/workspace/NewArrivalsPage";
 
 // ============ PROTECTED ROUTE ============
 const ProtectedRoute = ({ children, allowedRoles }) => {
@@ -169,6 +170,17 @@ export default function AppRoutes() {
             <ProtectedRoute allowedRoles={["client"]}>
               <MainLayout>
                 <MyOrders />
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/new-arrivals"
+          element={
+            <ProtectedRoute allowedRoles={["client"]}>
+              <MainLayout>
+                <NewArrivalsPage />
               </MainLayout>
             </ProtectedRoute>
           }

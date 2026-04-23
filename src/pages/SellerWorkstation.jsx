@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import {
   FaBell, FaToggleOn, FaToggleOff,
-  FaTrash, FaPlus, FaSearch, FaClipboardList,
+  FaTrash, FaPlus, FaSearch, FaClipboardList, FaEye,
 } from "react-icons/fa";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
@@ -35,6 +35,7 @@ export default function SellerWorkstation() {
   const [products, setProducts] = useState([]);
   const [bookings, setBookings] = useState([]);
   const [productOrders, setProductOrders] = useState([]);
+  const [productViews, setProductViews] = useState({});
   const [loading, setLoading] = useState(true);
   const [isLive, setIsLive] = useState(false);
   const [service, setService] = useState("");
@@ -50,7 +51,6 @@ export default function SellerWorkstation() {
     file: null,
   });
 
-  // Clean up GPS on unmount
   useEffect(() => {
     return () => {
       if (geoWatchRef.current) {
@@ -141,7 +141,6 @@ export default function SellerWorkstation() {
     );
   };
 
-  // ================= TOGGLE LIVE WITH GPS =================
   const toggleLive = async () => {
     setLiveLoading(true);
     try {
@@ -150,7 +149,6 @@ export default function SellerWorkstation() {
       const finalService = resolveCategory(service);
 
       if (isLive) {
-        // Stop GPS tracking
         if (geoWatchRef.current) {
           navigator.geolocation.clearWatch(geoWatchRef.current);
           geoWatchRef.current = null;
@@ -163,14 +161,12 @@ export default function SellerWorkstation() {
         setIsLive(false);
         setLiveLoading(false);
       } else {
-        // Check if geolocation is available
         if (!navigator.geolocation) {
           alert("Geolocation is not supported by your browser");
           setLiveLoading(false);
           return;
         }
 
-        // Get initial GPS position
         navigator.geolocation.getCurrentPosition(
           async (pos) => {
             try {
@@ -189,7 +185,6 @@ export default function SellerWorkstation() {
               setIsLive(true);
               setService(finalService);
 
-              // Start watching GPS position
               geoWatchRef.current = navigator.geolocation.watchPosition(
                 async (position) => {
                   try {
@@ -206,11 +201,7 @@ export default function SellerWorkstation() {
                   }
                 },
                 (err) => console.error("GPS watch error:", err),
-                {
-                  enableHighAccuracy: true,
-                  maximumAge: 5000,
-                  timeout: 10000,
-                }
+                { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
               );
             } catch (err) {
               alert("Failed to go live: " + err.message);
@@ -220,12 +211,12 @@ export default function SellerWorkstation() {
           },
           (err) => {
             console.error("GPS error:", err);
-            alert("Please allow location access to go live. This is needed so clients can track you.");
+            alert("Please allow location access to go live.");
             setLiveLoading(false);
           },
           { enableHighAccuracy: true, timeout: 15000 }
         );
-        return; // Return early — loading handled in GPS callback
+        return;
       }
     } catch (err) {
       alert("Failed: " + err.message);
@@ -237,14 +228,42 @@ export default function SellerWorkstation() {
     try {
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       if (!currentUser) return;
+
       const { data } = await supabase
         .from("products")
         .select("id, title, category, price, image_url, created_at")
         .eq("worker_id", currentUser.id)
         .order("created_at", { ascending: false });
+
       setProducts(data || []);
+
+      // Fetch view counts for each product
+      if (data && data.length > 0) {
+        await fetchProductViews(data.map(p => p.id));
+      }
     } catch (err) {
       console.error("fetchProducts failed:", err.message);
+    }
+  };
+
+  const fetchProductViews = async (productIds) => {
+    try {
+      const { data, error } = await supabase
+        .from("product_views")
+        .select("product_id")
+        .in("product_id", productIds);
+
+      if (error) throw error;
+
+      // Count views per product
+      const viewCounts = {};
+      (data || []).forEach(v => {
+        viewCounts[v.product_id] = (viewCounts[v.product_id] || 0) + 1;
+      });
+
+      setProductViews(viewCounts);
+    } catch (err) {
+      console.error("fetchProductViews failed:", err.message);
     }
   };
 
@@ -471,13 +490,17 @@ export default function SellerWorkstation() {
                   <div className="w-10 h-10 rounded-lg overflow-hidden bg-white/10 flex items-center justify-center">
                     {o.product_image_url ? (
                       <img src={o.product_image_url} className="w-full h-full object-cover" alt={o.product_name} />
-                    ) : (
-                      <span>📦</span>
-                    )}
+                    ) : <span>📦</span>}
                   </div>
                   <div>
                     <p className="text-sm font-medium">{o.product_name}</p>
-                    <p className="text-xs text-gray-400">From: {o.buyer_name}</p>
+                    {/* Buyer name → click to view profile */}
+                    <button
+                      onClick={() => navigate(`/seller-profile/${o.user_id}`)}
+                      className="text-xs text-green-400 hover:underline text-left"
+                    >
+                      👤 {o.buyer_name}
+                    </button>
                     <p className="text-xs text-gray-500">{formatDate(o.created_at)}</p>
                     {o.total_amount && (
                       <p className="text-xs text-green-400">₦{Number(o.total_amount).toLocaleString()}</p>
@@ -495,9 +518,7 @@ export default function SellerWorkstation() {
                     key={s}
                     onClick={() => updateOrderStatus(o.id, s)}
                     className={`text-xs px-2 py-1 rounded-lg transition ${
-                      o.status === s
-                        ? "bg-green-600 text-white"
-                        : "bg-white/10 hover:bg-white/20 text-gray-300"
+                      o.status === s ? "bg-green-600 text-white" : "bg-white/10 hover:bg-white/20 text-gray-300"
                     }`}
                   >
                     {s}
@@ -516,7 +537,7 @@ export default function SellerWorkstation() {
         )}
       </div>
 
-      {/* PRODUCTS */}
+      {/* MY PRODUCTS — with view counts */}
       <div className="bg-white/5 p-4 rounded-xl">
         <div className="flex justify-between items-center mb-3">
           <h2 className="font-semibold">My Products</h2>
@@ -579,21 +600,34 @@ export default function SellerWorkstation() {
           <p className="text-gray-500 text-sm">No products yet.</p>
         ) : (
           products.map((p) => (
-            <div key={p.id} className="flex justify-between items-center py-2 border-b border-white/10">
+            <div key={p.id} className="flex justify-between items-center py-3 border-b border-white/10">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full overflow-hidden bg-white/10 flex items-center justify-center">
+                <div className="w-12 h-12 rounded-xl overflow-hidden bg-white/10 flex items-center justify-center flex-shrink-0">
                   {p.image_url ? (
                     <img src={p.image_url} alt={p.title} className="w-full h-full object-cover" />
-                  ) : (
-                    <span>📦</span>
-                  )}
+                  ) : <span>📦</span>}
                 </div>
                 <div>
                   <p className="text-sm font-medium">{p.title}</p>
-                  <p className="text-xs text-gray-400">{p.category} • ₦{Number(p.price).toLocaleString()}</p>
+                  <p className="text-xs text-gray-400">
+                    {p.category} • ₦{Number(p.price).toLocaleString()}
+                  </p>
+                  {/* VIEW COUNT */}
+                  <div className="flex items-center gap-1 mt-1">
+                    <FaEye size={10} className="text-blue-400" />
+                    <span className="text-xs text-blue-400">
+                      {productViews[p.id] || 0} view{(productViews[p.id] || 0) !== 1 ? "s" : ""}
+                    </span>
+                    {/* Only show 24h badge if posted in last 24h */}
+                    {Date.now() - new Date(p.created_at).getTime() < 24 * 60 * 60 * 1000 && (
+                      <span className="text-[9px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded-full ml-1">
+                        24h status
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
-              <button onClick={() => deleteProduct(p)} className="text-red-400 hover:text-red-300">
+              <button onClick={() => deleteProduct(p)} className="text-red-400 hover:text-red-300 ml-2">
                 <FaTrash size={12} />
               </button>
             </div>
