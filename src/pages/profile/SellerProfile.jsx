@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
-  FaUserEdit, FaEllipsisV, FaPlus, FaTrash, FaStar
+  FaUserEdit, FaEllipsisV, FaPlus, FaTrash, FaStar, FaArrowLeft
 } from "react-icons/fa";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
@@ -9,9 +9,8 @@ import { useAuth } from "../../context/AuthContext";
 export default function SellerProfile() {
   const navigate = useNavigate();
   const { user, role, logout } = useAuth();
-
-  // Support viewing other workers profiles via /seller-profile/:id
   const { id: paramId } = useParams();
+
   const profileId = paramId || user?.id;
   const isOwnProfile = !paramId || paramId === user?.id;
 
@@ -21,11 +20,12 @@ export default function SellerProfile() {
   const [ratingOpen, setRatingOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
   const [profileImage, setProfileImage] = useState(null);
   const [reels, setReels] = useState([]);
   const [products, setProducts] = useState([]);
 
-  // Follow & Rating state
   const [isFollowing, setIsFollowing] = useState(false);
   const [followerCount, setFollowerCount] = useState(0);
   const [followLoading, setFollowLoading] = useState(false);
@@ -37,19 +37,22 @@ export default function SellerProfile() {
   const [hoverRating, setHoverRating] = useState(0);
 
   const [profile, setProfile] = useState({
-    full_name: "",
-    country: "",
-    avatar_url: "",
-    bio: "",
+    full_name: "", country: "", avatar_url: "", bio: "",
   });
   const [formData, setFormData] = useState(profile);
+
+  const containerRef = useRef(null);
+  const videoRefs = useRef(new Map());
 
   useEffect(() => {
     if (!profileId) return;
     fetchAll();
-  }, [profileId, user]);
+  }, [profileId]);
 
-  const fetchAll = async () => {
+  const fetchAll = async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
+
     await Promise.all([
       fetchProfile(),
       fetchReels(),
@@ -57,7 +60,9 @@ export default function SellerProfile() {
       fetchFollowData(),
       fetchRatingData(),
     ]);
+
     setLoading(false);
+    setRefreshing(false);
   };
 
   const fetchProfile = async () => {
@@ -67,7 +72,6 @@ export default function SellerProfile() {
         .select("full_name, country, avatar_url, bio")
         .eq("id", profileId)
         .maybeSingle();
-
       if (error) throw error;
       if (data) {
         setProfile(data);
@@ -99,15 +103,12 @@ export default function SellerProfile() {
 
   const fetchFollowData = async () => {
     try {
-      // Get follower count
       const { count } = await supabase
         .from("followers")
         .select("id", { count: "exact" })
         .eq("following_id", profileId);
-
       setFollowerCount(count || 0);
 
-      // Check if current user follows this worker
       if (user && !isOwnProfile) {
         const { data } = await supabase
           .from("followers")
@@ -115,7 +116,6 @@ export default function SellerProfile() {
           .eq("follower_id", user.id)
           .eq("following_id", profileId)
           .maybeSingle();
-
         setIsFollowing(!!data);
       }
     } catch (err) {
@@ -125,24 +125,28 @@ export default function SellerProfile() {
 
   const fetchRatingData = async () => {
     try {
-      // Get all ratings for this worker
       const { data } = await supabase
         .from("ratings")
         .select("rating, review, client_id")
         .eq("worker_id", profileId);
 
-      if (data && data.length > 0) {
+      if (data?.length > 0) {
         const avg = data.reduce((sum, r) => sum + r.rating, 0) / data.length;
         setAverageRating(avg);
         setRatingCount(data.length);
+      } else {
+        setAverageRating(0);
+        setRatingCount(0);
       }
 
-      // Get current user's rating if any
       if (user && !isOwnProfile) {
         const myR = data?.find(r => r.client_id === user.id);
         if (myR) {
           setMyRating(myR.rating);
           setMyReview(myR.review || "");
+        } else {
+          setMyRating(0);
+          setMyReview("");
         }
       }
     } catch (err) {
@@ -155,19 +159,14 @@ export default function SellerProfile() {
     setFollowLoading(true);
     try {
       if (isFollowing) {
-        await supabase
-          .from("followers")
-          .delete()
-          .eq("follower_id", user.id)
-          .eq("following_id", profileId);
+        await supabase.from("followers").delete()
+          .eq("follower_id", user.id).eq("following_id", profileId);
         setIsFollowing(false);
-        setFollowerCount(prev => Math.max(0, prev - 1));
+        setFollowerCount(p => Math.max(0, p - 1));
       } else {
-        await supabase
-          .from("followers")
-          .insert({ follower_id: user.id, following_id: profileId });
+        await supabase.from("followers").insert({ follower_id: user.id, following_id: profileId });
         setIsFollowing(true);
-        setFollowerCount(prev => prev + 1);
+        setFollowerCount(p => p + 1);
       }
     } catch (err) {
       console.error("toggleFollow error:", err.message);
@@ -176,25 +175,32 @@ export default function SellerProfile() {
     }
   };
 
+  // FIXED & WORKING RATING
   const submitRating = async () => {
     if (!user || role !== "client" || myRating === 0) return;
+
     setRatingSubmitting(true);
     try {
-      await supabase
+      const { error } = await supabase
         .from("ratings")
-        .upsert({
-          client_id: user.id,
-          worker_id: profileId,
-          rating: myRating,
-          review: myReview.trim() || null,
-        });
+        .upsert(
+          {
+            client_id: user.id,
+            worker_id: profileId,
+            rating: myRating,
+            review: myReview.trim() || null,
+          },
+          { onConflict: "client_id,worker_id" }
+        );
+
+      if (error) throw error;
 
       await fetchRatingData();
       setRatingOpen(false);
       alert("✅ Rating submitted!");
     } catch (err) {
       console.error("submitRating error:", err.message);
-      alert("Failed to submit rating: " + err.message);
+      alert("Failed to submit rating: " + (err.message || "Unknown error"));
     } finally {
       setRatingSubmitting(false);
     }
@@ -211,6 +217,7 @@ export default function SellerProfile() {
         .from("avatars")
         .upload(fileName, file, { upsert: true });
       if (uploadError) throw uploadError;
+
       const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(fileName);
       await supabase.from("profiles").update({ avatar_url: urlData.publicUrl }).eq("id", user.id);
       setProfileImage(urlData.publicUrl);
@@ -263,229 +270,271 @@ export default function SellerProfile() {
     fetchProducts();
   };
 
-  const renderStars = (rating, interactive = false, size = 20) => {
-    return (
-      <div className="flex gap-1">
-        {[1, 2, 3, 4, 5].map((star) => (
-          <FaStar
-            key={star}
-            size={size}
-            className={`cursor-${interactive ? "pointer" : "default"} transition-colors ${
-              star <= (interactive ? (hoverRating || myRating) : rating)
-                ? "text-yellow-400"
-                : "text-white/20"
-            }`}
-            onMouseEnter={() => interactive && setHoverRating(star)}
-            onMouseLeave={() => interactive && setHoverRating(0)}
-            onClick={() => interactive && setMyRating(star)}
-          />
-        ))}
-      </div>
-    );
-  };
-
-  if (loading) return (
-    <div className="min-h-screen bg-black flex items-center justify-center text-white">
-      <div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+  const renderStars = (rating, interactive = false, size = 18) => (
+    <div className="flex gap-0.5">
+      {[1, 2, 3, 4, 5].map((star) => (
+        <FaStar
+          key={star}
+          size={size}
+          className={`transition-all duration-200 ${
+            interactive ? "cursor-pointer active:scale-125" : "cursor-default"
+          } ${
+            star <= (interactive ? (hoverRating || myRating) : Math.floor(rating))
+              ? "text-yellow-400" : "text-white/20"
+          }`}
+          onMouseEnter={() => interactive && setHoverRating(star)}
+          onMouseLeave={() => interactive && setHoverRating(0)}
+          onClick={() => interactive && setMyRating(star)}
+        />
+      ))}
     </div>
   );
 
-  return (
-    <div className="min-h-screen bg-black text-white pb-20">
+  // Pull to Refresh
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
 
-      {/* HEADER */}
-      <div className="sticky top-0 z-50 bg-black/90 backdrop-blur-md flex justify-between items-center px-4 py-4 border-b border-white/10">
+    let startY = 0, currentY = 0, isPulling = false;
+
+    const handleTouchStart = (e) => {
+      if (window.scrollY === 0) {
+        startY = e.touches[0].clientY;
+        isPulling = true;
+      }
+    };
+
+    const handleTouchMove = (e) => {
+      if (!isPulling) return;
+      currentY = e.touches[0].clientY;
+      const pull = Math.max(0, currentY - startY);
+      container.style.transform = `translateY(${Math.min(pull * 0.55, 75)}px)`;
+    };
+
+    const handleTouchEnd = () => {
+      if (!isPulling) return;
+      const pullDistance = currentY - startY;
+      isPulling = false;
+      container.style.transition = "transform 380ms cubic-bezier(0.25, 1, 0.25, 1)";
+      container.style.transform = "translateY(0)";
+      if (pullDistance > 105) fetchAll(true);
+      setTimeout(() => { container.style.transition = ""; }, 400);
+    };
+
+    container.addEventListener("touchstart", handleTouchStart, { passive: true });
+    container.addEventListener("touchmove", handleTouchMove, { passive: true });
+    container.addEventListener("touchend", handleTouchEnd);
+
+    return () => {
+      container.removeEventListener("touchstart", handleTouchStart);
+      container.removeEventListener("touchmove", handleTouchMove);
+      container.removeEventListener("touchend", handleTouchEnd);
+    };
+  }, []);
+
+  const setupVideoPlayback = useCallback((reelId, videoEl) => {
+    if (!videoEl) return;
+    const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    if (!isTouch) {
+      const play = () => videoEl.play().catch(() => {});
+      const pause = () => videoEl.pause();
+      videoEl.addEventListener("mouseenter", play);
+      videoEl.addEventListener("mouseleave", pause);
+    } else {
+      const observer = new IntersectionObserver(
+        (entries) => entries.forEach(e => e.isIntersecting ? videoEl.play().catch(() => {}) : videoEl.pause()),
+        { threshold: 0.6 }
+      );
+      observer.observe(videoEl);
+    }
+  }, []);
+
+  if (loading && !refreshing) {
+    return (
+      <div className="min-h-screen bg-black text-white">
+        <div className="sticky top-0 h-14 bg-black/95 backdrop-blur border-b border-white/10" />
+        <div className="px-5 pt-8 animate-pulse flex flex-col items-center">
+          <div className="w-24 h-24 bg-zinc-800 rounded-3xl" />
+          <div className="mt-4 h-6 w-44 bg-zinc-800 rounded-xl" />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div ref={containerRef} className="min-h-screen bg-black text-white pb-20 overflow-x-hidden">
+
+      {/* HEADER - Compact */}
+      <div className="sticky top-0 z-50 bg-black/95 backdrop-blur-lg border-b border-white/10 px-4 py-3 flex items-center justify-between">
         {!isOwnProfile && (
-          <button onClick={() => navigate(-1)} className="text-gray-400 hover:text-white">
-            ←
+          <button onClick={() => navigate(-1)} className="p-1 text-gray-400 active:scale-90">
+            <FaArrowLeft size={19} />
           </button>
         )}
-        <h1 className="font-bold text-lg flex-1 text-center">
-          {isOwnProfile ? "Profile" : profile.full_name}
+        <h1 className="font-semibold text-base tracking-tight">
+          {isOwnProfile ? "My Profile" : profile.full_name || "Profile"}
         </h1>
         {isOwnProfile && (
-          <div className="relative">
-            <FaEllipsisV
-              className="cursor-pointer text-gray-400"
-              onClick={() => setMenuOpen(!menuOpen)}
-            />
-            {menuOpen && (
-              <div className="absolute right-0 mt-2 bg-[#1a1a1a] border border-white/10 rounded-xl p-2 text-sm z-50 w-36">
-                <p
-                  className="p-2 hover:bg-white/10 rounded-lg cursor-pointer"
-                  onClick={() => { setMenuOpen(false); navigate("/seller-settings"); }}
-                >
-                  Settings
-                </p>
-                <p
-                  className="p-2 hover:bg-white/10 rounded-lg cursor-pointer text-red-400"
-                  onClick={async () => { await logout(); navigate("/login"); }}
-                >
-                  Logout
-                </p>
-              </div>
-            )}
-          </div>
+          <button onClick={() => setMenuOpen(!menuOpen)} className="p-2 text-gray-400 active:scale-90">
+            <FaEllipsisV size={19} />
+          </button>
         )}
       </div>
 
-      {/* PROFILE INFO */}
-      <div className="flex flex-col items-center px-4 py-6">
-        <div className="relative">
-          <div className="w-24 h-24 rounded-full overflow-hidden border-4 border-green-600 bg-white/10 flex items-center justify-center">
-            {profileImage ? (
-              <img src={profileImage} alt="Profile" className="w-full h-full object-cover" />
-            ) : (
-              <span className="text-3xl font-bold">{profile.full_name?.[0] || "W"}</span>
+      {/* PROFILE INFO - Reduced Size */}
+      <div className="px-5 pt-6 pb-4">
+        <div className="flex flex-col items-center">
+          <div className="relative group">
+            <div className="w-24 h-24 rounded-3xl overflow-hidden border-4 border-green-600 shadow-md transition-all group-hover:scale-105">
+              {(profileImage || profile.avatar_url) ? (
+                <img src={profileImage || profile.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full bg-gradient-to-br from-green-600 to-emerald-700 flex items-center justify-center text-5xl font-bold">
+                  {profile.full_name?.[0] || "W"}
+                </div>
+              )}
+            </div>
+            {isOwnProfile && (
+              <label className="absolute -bottom-1 -right-1 bg-green-600 p-2.5 rounded-2xl cursor-pointer active:scale-90">
+                <FaPlus size={13} />
+                <input type="file" accept="image/*" className="hidden" onChange={changeProfileImage} />
+              </label>
             )}
           </div>
-          {isOwnProfile && (
-            <label className="absolute bottom-0 right-0 bg-green-600 p-2 rounded-full cursor-pointer">
-              <FaPlus size={10} />
-              <input type="file" accept="image/*" className="hidden" onChange={changeProfileImage} />
-            </label>
-          )}
-        </div>
 
-        <h3 className="mt-3 text-lg font-semibold">{profile.full_name || "Worker"}</h3>
-        <p className="text-white/60 text-sm mt-1 text-center px-8">{profile.bio || ""}</p>
-        <p className="text-gray-500 text-xs mt-1">{profile.country || ""}</p>
+          <h2 className="mt-4 text-xl font-bold tracking-tight">{profile.full_name || "Worker"}</h2>
+          {profile.country && <p className="text-emerald-400 text-xs mt-0.5">📍 {profile.country}</p>}
+          {profile.bio && <p className="mt-3 text-center text-gray-400 text-xs leading-relaxed max-w-[240px]">{profile.bio}</p>}
 
-        {/* RATING DISPLAY */}
-        <div className="flex items-center gap-2 mt-3">
-          {renderStars(averageRating)}
-          <span className="text-yellow-400 font-semibold text-sm">
-            {averageRating > 0 ? averageRating.toFixed(1) : "0.0"}
-          </span>
-          <span className="text-gray-500 text-xs">({ratingCount} reviews)</span>
-        </div>
+          {/* Rating */}
+          <div className="flex items-center gap-1.5 mt-4">
+            {renderStars(averageRating)}
+            <span className="text-yellow-400 font-medium text-base ml-1">{averageRating.toFixed(1)}</span>
+            <span className="text-gray-500 text-xs">({ratingCount})</span>
+          </div>
 
-        {/* STATS */}
-        <div className="flex gap-10 mt-4 text-center">
-          <div>
-            <p className="font-bold">{reels.length}</p>
-            <span className="text-xs text-white/50">Reels</span>
-          </div>
-          <div>
-            <p className="font-bold">{products.length}</p>
-            <span className="text-xs text-white/50">Products</span>
-          </div>
-          <div>
-            <p className="font-bold">{followerCount}</p>
-            <span className="text-xs text-white/50">Followers</span>
-          </div>
-          <div>
-            <p className="font-bold">
-              {reels.reduce((sum, r) => sum + (r.likes || 0), 0)}
-            </p>
-            <span className="text-xs text-white/50">Likes</span>
+          {/* Stats - Compact */}
+          <div className="mt-6 grid grid-cols-4 gap-5 w-full max-w-xs text-center">
+            {[
+              { value: reels.length, label: "Reels" },
+              { value: products.length, label: "Products" },
+              { value: followerCount, label: "Followers" },
+              { value: reels.reduce((s, r) => s + (r.likes || 0), 0), label: "Likes" },
+            ].map((s, i) => (
+              <div key={i}>
+                <div className="text-xl font-bold tracking-tighter">{s.value}</div>
+                <div className="text-[10px] text-gray-500 mt-0.5 uppercase tracking-widest">{s.label}</div>
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* ACTION BUTTONS */}
-        <div className="flex gap-3 mt-4 w-full max-w-xs">
-          {isOwnProfile ? (
-            <>
-              <button
-                onClick={() => setEditOpen(true)}
-                className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-xl font-semibold flex items-center justify-center gap-2 text-sm transition"
-              >
-                <FaUserEdit />
-                Edit Profile
-              </button>
-              <button
-                onClick={() => navigate("/create-reel")}
-                className="flex-1 bg-white/10 hover:bg-white/20 py-2 rounded-xl text-sm font-semibold transition"
-              >
-                + Reel
-              </button>
-            </>
-          ) : (
-            <>
-              {/* Follow button — only for clients */}
-              {role === "client" && (
-                <button
-                  onClick={toggleFollow}
-                  disabled={followLoading}
-                  className={`flex-1 py-2 rounded-xl font-semibold text-sm transition disabled:opacity-60 ${
-                    isFollowing
-                      ? "bg-white/10 hover:bg-white/20 text-white"
-                      : "bg-green-600 hover:bg-green-700 text-white"
-                  }`}
-                >
-                  {followLoading ? "..." : isFollowing ? "Following ✓" : "Follow"}
-                </button>
+      {/* Action Buttons - Narrower Width */}
+<div className="flex gap-3 mt-7 px-5 justify-center">
+  {isOwnProfile ? (
+    <>
+      <button
+        onClick={() => setEditOpen(true)}
+        className="flex-1 max-w-[140px] bg-green-600 py-2.5 rounded-2xl text-xs font-medium active:scale-[0.96] transition-all"
+      >
+        ✏️ Edit
+      </button>
+      <button
+        onClick={() => navigate("/create-reel")}
+        className="flex-1 max-w-[140px] bg-white/10 py-2.5 rounded-2xl text-xs font-medium active:scale-[0.96] transition-all"
+      >
+        + Reel
+      </button>
+    </>
+  ) : (
+    <>
+      {role === "client" && (
+        <>
+          <button
+            onClick={toggleFollow}
+            disabled={followLoading}
+            className={`flex-1 max-w-[140px] py-2.5 rounded-2xl text-xs font-medium active:scale-[0.96] transition-all ${
+              isFollowing ? "bg-zinc-800" : "bg-green-600"
+            }`}
+          >
+            {followLoading ? "..." : isFollowing ? "Following" : "Follow"}
+          </button>
+          <button
+            onClick={() => setRatingOpen(true)}
+            className="flex-1 max-w-[140px] py-2.5 bg-yellow-600/10 border border-yellow-600/30 text-yellow-400 rounded-2xl text-xs font-medium active:scale-[0.96] transition-all"
+          >
+            ⭐ Rate
+          </button>
+        </>
+      )}
+      <button
+        onClick={() => navigate(`/inbox?user=${profileId}`)}
+        className="flex-1 max-w-[140px] py-2.5 bg-white/10 rounded-2xl text-xs font-medium active:scale-[0.96] transition-all"
+      >
+        Message
+      </button>
+    </>
+  )}
+</div>
+      </div>
+
+      {/* TABS - Slim */}
+      <div className="border-b border-white/10 sticky top-[53px] bg-black z-40">
+        <div className="flex px-5">
+          {["reels", "products"].map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`flex-1 py-3.5 text-sm font-medium relative transition-all ${
+                activeTab === tab ? "text-white" : "text-gray-400"
+              }`}
+            >
+              {tab === "reels" ? "Reels" : "Products"}
+              {activeTab === tab && (
+                <div className="absolute bottom-0 left-1/2 h-0.5 w-8 -translate-x-1/2 bg-green-500 rounded-full" />
               )}
-
-              {/* Rate button — only for clients */}
-              {role === "client" && (
-                <button
-                  onClick={() => setRatingOpen(true)}
-                  className="flex-1 bg-yellow-600/20 hover:bg-yellow-600/30 text-yellow-400 py-2 rounded-xl text-sm font-semibold transition border border-yellow-600/30"
-                >
-                  ⭐ {myRating > 0 ? "Edit Rating" : "Rate"}
-                </button>
-              )}
-
-              {/* Message button */}
-              <button
-                onClick={() => navigate(`/inbox?user=${profileId}`)}
-                className="flex-1 bg-white/10 hover:bg-white/20 py-2 rounded-xl text-sm font-semibold transition"
-              >
-                💬 Message
-              </button>
-            </>
-          )}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* TABS */}
-      <div className="flex justify-around border-y border-white/10 py-3 text-sm">
-        <button
-          onClick={() => setActiveTab("reels")}
-          className={activeTab === "reels" ? "font-semibold text-white" : "text-white/40"}
-        >
-          Reels
-        </button>
-        <button
-          onClick={() => setActiveTab("products")}
-          className={activeTab === "products" ? "font-semibold text-white" : "text-white/40"}
-        >
-          Products
-        </button>
-      </div>
-
-      {/* CONTENT */}
-      <div className="p-4">
+      {/* CONTENT - Compact */}
+      <div className="p-4 pt-4">
         {activeTab === "reels" && (
           <div className="grid grid-cols-3 gap-2">
             {reels.length === 0 ? (
-              <div className="col-span-3 text-center py-10">
-                <p className="text-gray-500 text-sm">No reels yet</p>
+              <div className="col-span-3 py-12 text-center">
+                <div className="text-5xl mb-2 opacity-30">🎥</div>
+                <p className="text-gray-400 text-xs">No reels yet</p>
                 {isOwnProfile && (
-                  <button
-                    onClick={() => navigate("/create-reel")}
-                    className="mt-3 bg-green-600 hover:bg-green-700 px-4 py-2 rounded-xl text-sm font-semibold transition"
-                  >
+                  <button onClick={() => navigate("/create-reel")} className="mt-4 bg-green-600 px-5 py-2 rounded-2xl text-xs font-medium">
                     Create Reel
                   </button>
                 )}
               </div>
             ) : (
-              reels.map(r => (
-                <div key={r.id} className="relative aspect-square bg-white/10 rounded-xl overflow-hidden">
-                  <video src={r.video_url} className="w-full h-full object-cover" muted />
+              reels.map((reel, i) => (
+                <div
+                  key={reel.id}
+                  className="group relative aspect-square bg-zinc-900 rounded-xl overflow-hidden hover:scale-105 transition-all active:scale-95"
+                >
+                  <video
+                    ref={(el) => el && setupVideoPlayback(reel.id, el)}
+                    src={reel.video_url}
+                    className="w-full h-full object-cover"
+                    muted
+                    loop
+                    playsInline
+                  />
                   {isOwnProfile && (
                     <button
-                      onClick={() => deleteReel(r.id, r.video_url)}
-                      className="absolute top-1 right-1 bg-black/60 p-1 rounded-full text-red-400"
+                      onClick={() => deleteReel(reel.id, reel.video_url)}
+                      className="absolute top-1.5 right-1.5 bg-black/70 p-1 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-600"
                     >
-                      <FaTrash size={10} />
+                      <FaTrash size={12} />
                     </button>
                   )}
-                  <div className="absolute bottom-1 left-1 text-xs text-white/70">
-                    ❤️ {r.likes || 0}
-                  </div>
+                  <div className="absolute bottom-1.5 left-1.5 text-[10px] bg-black/60 px-1.5 py-px rounded">❤️ {reel.likes || 0}</div>
                 </div>
               ))
             )}
@@ -495,42 +544,38 @@ export default function SellerProfile() {
         {activeTab === "products" && (
           <div className="grid grid-cols-2 gap-3">
             {products.length === 0 ? (
-              <div className="col-span-2 text-center py-10">
-                <p className="text-gray-500 text-sm">No products yet</p>
+              <div className="col-span-2 py-12 text-center">
+                <div className="text-5xl mb-2 opacity-30">🛍️</div>
+                <p className="text-gray-400 text-xs">No products yet</p>
                 {isOwnProfile && (
-                  <button
-                    onClick={() => navigate("/workstation")}
-                    className="mt-3 bg-green-600 hover:bg-green-700 px-4 py-2 rounded-xl text-sm font-semibold transition"
-                  >
+                  <button onClick={() => navigate("/workstation")} className="mt-4 bg-green-600 px-5 py-2 rounded-2xl text-xs font-medium">
                     Add Product
                   </button>
                 )}
               </div>
             ) : (
-              products.map(p => (
+              products.map((p) => (
                 <div
                   key={p.id}
-                  className="bg-white/5 border border-white/10 rounded-xl overflow-hidden cursor-pointer"
                   onClick={() => navigate(`/product/${p.id}`)}
+                  className="bg-zinc-900 border border-white/10 rounded-xl overflow-hidden hover:border-green-600/40 transition-all cursor-pointer active:scale-[0.97]"
                 >
-                  <div className="w-full h-32 bg-white/10 flex items-center justify-center">
+                  <div className="h-36 bg-zinc-800">
                     {p.image_url ? (
                       <img src={p.image_url} alt={p.title} className="w-full h-full object-cover" />
                     ) : (
-                      <span className="text-3xl">📦</span>
+                      <div className="w-full h-full flex items-center justify-center text-4xl">📦</div>
                     )}
                   </div>
-                  <div className="p-2">
-                    <p className="text-sm font-medium truncate">{p.title}</p>
-                    <p className="text-green-400 text-xs font-bold">
-                      ₦{Number(p.price).toLocaleString()}
-                    </p>
+                  <div className="p-2.5">
+                    <p className="text-xs font-medium line-clamp-2">{p.title}</p>
+                    <p className="text-green-400 font-bold text-sm mt-1">₦{Number(p.price).toLocaleString()}</p>
                     {isOwnProfile && (
                       <button
                         onClick={(e) => { e.stopPropagation(); deleteProduct(p.id, p.image_url); }}
-                        className="text-red-400 text-xs mt-1 flex items-center gap-1"
+                        className="text-red-400 text-[10px] mt-1 flex items-center gap-1"
                       >
-                        <FaTrash size={10} /> Delete
+                        <FaTrash size={11} /> Delete
                       </button>
                     )}
                   </div>
@@ -541,47 +586,25 @@ export default function SellerProfile() {
         )}
       </div>
 
-      {/* EDIT PROFILE MODAL */}
+      {/* Refreshing Indicator */}
+      {refreshing && (
+        <div className="fixed top-14 left-1/2 -translate-x-1/2 bg-zinc-900 text-green-400 px-4 py-2 rounded-2xl shadow-xl flex items-center gap-2 text-xs z-50 border border-green-500/30">
+          <div className="w-3.5 h-3.5 border-2 border-green-400 border-t-transparent rounded-full animate-spin" />
+          Refreshing...
+        </div>
+      )}
+
+      {/* EDIT MODAL - Compact */}
       {editOpen && (
         <div className="fixed inset-0 bg-black/80 flex justify-center items-center z-50 p-4">
-          <div className="bg-[#1a1a1a] border border-white/10 p-6 rounded-2xl w-full max-w-sm text-white">
-            <h2 className="font-bold text-lg mb-4">Edit Profile</h2>
-            <input
-              type="text"
-              name="full_name"
-              value={formData.full_name || ""}
-              onChange={handleChange}
-              placeholder="Full Name"
-              className="w-full p-3 mb-3 rounded-xl bg-white/10 text-white outline-none text-sm"
-            />
-            <input
-              type="text"
-              name="country"
-              value={formData.country || ""}
-              onChange={handleChange}
-              placeholder="Country"
-              className="w-full p-3 mb-3 rounded-xl bg-white/10 text-white outline-none text-sm"
-            />
-            <textarea
-              name="bio"
-              value={formData.bio || ""}
-              onChange={handleChange}
-              placeholder="Bio (optional)"
-              rows={2}
-              className="w-full p-3 mb-3 rounded-xl bg-white/10 text-white outline-none text-sm"
-            />
-            <div className="flex gap-2 mt-2">
-              <button
-                onClick={() => setEditOpen(false)}
-                className="flex-1 py-2 rounded-xl bg-white/10 text-sm"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={saveProfile}
-                disabled={saving}
-                className="flex-1 py-2 rounded-xl bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-sm font-semibold transition"
-              >
+          <div className="bg-zinc-900 border border-white/10 p-5 rounded-2xl w-full max-w-sm">
+            <h2 className="font-bold text-base mb-4">Edit Profile</h2>
+            <input type="text" name="full_name" value={formData.full_name || ""} onChange={handleChange} placeholder="Full Name" className="w-full p-3 mb-3 rounded-xl bg-white/10 text-sm" />
+            <input type="text" name="country" value={formData.country || ""} onChange={handleChange} placeholder="Country" className="w-full p-3 mb-3 rounded-xl bg-white/10 text-sm" />
+            <textarea name="bio" value={formData.bio || ""} onChange={handleChange} placeholder="Bio" rows={2} className="w-full p-3 mb-4 rounded-xl bg-white/10 text-sm" />
+            <div className="flex gap-2">
+              <button onClick={() => setEditOpen(false)} className="flex-1 py-2.5 rounded-xl bg-white/10 text-sm">Cancel</button>
+              <button onClick={saveProfile} disabled={saving} className="flex-1 py-2.5 rounded-xl bg-green-600 disabled:bg-gray-600 text-sm font-medium">
                 {saving ? "Saving..." : "Save"}
               </button>
             </div>
@@ -589,50 +612,38 @@ export default function SellerProfile() {
         </div>
       )}
 
-      {/* RATING MODAL */}
+      {/* RATING MODAL - Compact */}
       {ratingOpen && (
         <div className="fixed inset-0 bg-black/80 flex justify-center items-center z-50 p-4">
-          <div className="bg-[#1a1a1a] border border-white/10 p-6 rounded-2xl w-full max-w-sm text-white">
-            <h2 className="font-bold text-lg mb-2">Rate {profile.full_name}</h2>
-            <p className="text-gray-400 text-sm mb-4">
-              How was your experience with this worker?
-            </p>
+          <div className="bg-zinc-900 border border-white/10 p-5 rounded-2xl w-full max-w-sm text-white">
+            <h2 className="font-bold text-base mb-2">Rate {profile.full_name}</h2>
 
-            {/* Star selector */}
-            <div className="flex justify-center mb-4">
-              {renderStars(myRating, true, 32)}
+            <div className="flex justify-center my-4">
+              {renderStars(myRating, true, 34)}
             </div>
 
-            <p className="text-center text-sm text-gray-400 mb-4">
-              {myRating === 1 && "Poor"}
-              {myRating === 2 && "Fair"}
-              {myRating === 3 && "Good"}
-              {myRating === 4 && "Very Good"}
-              {myRating === 5 && "Excellent!"}
+            <p className="text-center text-xs text-gray-400 mb-4">
+              {myRating === 1 && "Poor"} {myRating === 2 && "Fair"} {myRating === 3 && "Good"}
+              {myRating === 4 && "Very Good"} {myRating === 5 && "Excellent!"} 
               {myRating === 0 && "Tap a star to rate"}
             </p>
 
             <textarea
               value={myReview}
               onChange={(e) => setMyReview(e.target.value)}
-              placeholder="Write a review (optional)..."
-              rows={3}
-              className="w-full p-3 mb-4 rounded-xl bg-white/10 text-white outline-none text-sm"
+              placeholder="Review (optional)"
+              rows={2}
+              className="w-full p-3 mb-4 rounded-xl bg-white/10 text-sm"
             />
 
             <div className="flex gap-2">
-              <button
-                onClick={() => setRatingOpen(false)}
-                className="flex-1 py-2 rounded-xl bg-white/10 text-sm"
-              >
-                Cancel
-              </button>
+              <button onClick={() => setRatingOpen(false)} className="flex-1 py-2.5 rounded-xl bg-white/10 text-sm">Cancel</button>
               <button
                 onClick={submitRating}
                 disabled={ratingSubmitting || myRating === 0}
-                className="flex-1 py-2 rounded-xl bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-600 text-sm font-semibold transition"
+                className="flex-1 py-2.5 rounded-xl bg-yellow-600 disabled:bg-gray-600 text-sm font-medium transition"
               >
-                {ratingSubmitting ? "Submitting..." : "Submit Rating"}
+                {ratingSubmitting ? "Submitting..." : "Submit"}
               </button>
             </div>
           </div>
