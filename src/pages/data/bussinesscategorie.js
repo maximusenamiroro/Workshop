@@ -1,4 +1,4 @@
-// Global business categories for Workshop platform
+// Global business categories for omoworkit platform
 
 export const businessCategories = {
   "Handwork & Skilled Workers": [

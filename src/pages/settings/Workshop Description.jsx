@@ -15,7 +15,7 @@ return(
 <h2 className="text-xl font-bold mb-4">Blocked Users</h2>
 
 <p className="text-sm text-gray-500 mb-4">
-People you block cannot message you, view your workshop, or interact with your posts.
+People you block cannot message you, view your omoworkit, or interact with your posts.
 </p>
 
 {blocked.length === 0 ? (

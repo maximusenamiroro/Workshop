@@ -365,19 +365,25 @@ export default function SellerProfile() {
     <div ref={containerRef} className="min-h-screen bg-black text-white pb-20 overflow-x-hidden">
 
       {/* HEADER - Compact */}
-      <div className="sticky top-0 z-50 bg-black/95 backdrop-blur-lg border-b border-white/10 px-4 py-3 flex items-center justify-between">
-        {!isOwnProfile && (
-          <button onClick={() => navigate(-1)} className="p-1 text-gray-400 active:scale-90">
-            <FaArrowLeft size={19} />
-          </button>
-        )}
-        <h1 className="font-semibold text-base tracking-tight">
-          {isOwnProfile ? "My Profile" : profile.full_name || "Profile"}
-        </h1>
-        {isOwnProfile && (
-          <button onClick={() => setMenuOpen(!menuOpen)} className="p-2 text-gray-400 active:scale-90">
-            <FaEllipsisV size={19} />
-          </button>
+     <div className="sticky top-0 z-50 bg-black/95 backdrop-blur-lg border-b border-white/10 px-4 py-3 flex items-center justify-between">
+        <div className="w-8" />
+        <h1 className="font-semibold text-lg">My Profile</h1>
+        <button
+          onClick={() => setMenuOpen(!menuOpen)}
+          className="p-2 text-gray-400 hover:text-white active:scale-90 transition-transform"
+        >
+          <FaEllipsisV size={19} />
+        </button>
+
+        {menuOpen && (
+          <div className="absolute right-4 top-14 bg-zinc-900 border border-white/10 rounded-2xl p-2 text-sm z-50 w-40 shadow-xl">
+            <p className="p-3 hover:bg-white/10 rounded-xl cursor-pointer" onClick={() => { setMenuOpen(false); navigate("/settings"); }}>
+              ⚙️ Settings
+            </p>
+            <p className="p-3 hover:bg-white/10 rounded-xl cursor-pointer text-red-400" onClick={async () => { await logout(); navigate("/login"); }}>
+              🚪 Logout
+            </p>
+          </div>
         )}
       </div>
 

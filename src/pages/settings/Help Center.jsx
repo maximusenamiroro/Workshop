@@ -5,7 +5,7 @@ export default function HelpCenter(){
 const articles = [
 {
 title:"How to upload products",
-content:"To upload a product, go to the Workshop page and click 'Add Product'. Upload clear images of your product, enter the product name and description, set the price, and publish it so customers can view it."
+content:"To upload a product, go to the omoworkit page and click 'Add Product'. Upload clear images of your product, enter the product name and description, set the price, and publish it so customers can view it."
 },
 {
 title:"How to receive payments",
@@ -17,7 +17,7 @@ content:"To manage your orders, go to the Orders page from your dashboard. There
 },
 {
 title:"How to contact support",
-content:"If you need help with your account or workshop, open Settings, go to the Help & Support section, and select Contact Support. Send your message and our support team will respond as soon as possible."
+content:"If you need help with your account or omoworkit, open Settings, go to the Help & Support section, and select Contact Support. Send your message and our support team will respond as soon as possible."
 }
 ];
 
