@@ -462,16 +462,16 @@ export default function SellerWorkstation() {
           className="w-full p-2 mb-3 bg-black/30 rounded text-white"
         >
           <option value="">Auto (Use Category: {workerCategory || "General"})</option>
-          <option value="Cleaning">Cleaning</option>
-          <option value="Plumbing">Plumbing</option>
-          <option value="Electrical">Electrical</option>
-          <option value="Driving">Driving</option>
-          <option value="Carpentry">Carpentry</option>
+          <option value="Sale's Representative">Sale's Representative</option>
+          <option value="Office help">Office help</option>
+          <option value="House keeping">House keeping</option>
+          <option value="Cook">Cook</option>
+          <option value="Receptionist">Receptionist</option>
           <option value="Security">Security</option>
-          <option value="Delivery">Delivery</option>
-          <option value="Tailoring">Tailoring</option>
-          <option value="Painting">Painting</option>
-          <option value="Welding">Welding</option>
+          <option value="Drivers">Drivers</option>
+          <option value="Cashier">Cashier</option>
+          <option value="Personal Assistant">Personal Assistant</option>
+          <option value="Body Massage">Body Massage</option>
         </select>
         <div className="flex items-center justify-between">
           <span className={isLive ? "text-green-400 font-semibold" : "text-gray-400"}>

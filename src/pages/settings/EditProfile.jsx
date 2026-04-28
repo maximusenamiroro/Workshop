@@ -83,7 +83,7 @@ onChange={handleChange}
 
 <textarea
 name="bio"
-placeholder="Tell customers about your workshop"
+placeholder="Tell customers about your omoworkit"
 className="w-full border p-2 rounded mb-5"
 onChange={handleChange}
 />

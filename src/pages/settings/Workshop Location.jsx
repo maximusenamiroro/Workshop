@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-export default function WorkshopLocation(){
+export default function omoworkitLocation(){
 
 const [location,setLocation] = useState({
 country:"",
@@ -49,7 +49,7 @@ return(
 <div className="max-w-md mx-auto p-4">
 
 <h2 className="text-xl font-bold mb-4">
-Workshop Location
+omoworkit Location
 </h2>
 
 {/* Country */}

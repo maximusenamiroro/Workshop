@@ -195,8 +195,8 @@ export default function SellerSettings() {
             onClick={() => {
               if (navigator.share) {
                 navigator.share({
-                  title: "Workshop",
-                  text: "Join Workshop — connect with workers and clients!",
+                  title: "omoworkit",
+                  text: "Join omoworkit — connect with workers and clients!",
                   url: window.location.origin,
                 });
               } else {

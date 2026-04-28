@@ -37,7 +37,7 @@ export default function ResetPassword() {
       <div className="bg-[#121826] p-10 rounded-3xl w-full max-w-md">
 
         <div className="flex flex-col items-center mb-10">
-          <img src={logo} alt="Workshop Logo" className="w-20 mb-4" />
+          <img src={logo} alt="omoworkit Logo" className="w-20 mb-4" />
           <h2 className="text-3xl font-bold">Reset Password</h2>
           <p className="text-gray-400 text-sm text-center mt-2">
             Enter your email to receive a reset link

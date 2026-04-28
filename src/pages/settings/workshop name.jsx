@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-export default function WorkshopName() {
+export default function omoworkitName() {
 
 const [name,setName] = useState("");
 
@@ -8,15 +8,15 @@ return(
 
 <div className="max-w-md mx-auto p-4">
 
-<h2 className="text-xl font-bold mb-4">Workshop Name</h2>
+<h2 className="text-xl font-bold mb-4">omoworkit Name</h2>
 
 <p className="text-sm text-gray-500 mb-3">
-This name will appear on your workshop profile.
+This name will appear on your omoworkit profile.
 </p>
 
 <input
 type="text"
-placeholder="Enter workshop name"
+placeholder="Enter omoworkit name"
 value={name}
 onChange={(e)=>setName(e.target.value)}
 className="w-full border p-2 rounded mb-4"

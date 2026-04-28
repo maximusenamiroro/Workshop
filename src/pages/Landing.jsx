@@ -39,8 +39,8 @@ export default function LandingPage() {
       {/* Header */}
       <header className="flex justify-between items-center px-8 py-6">
         <div className="flex items-center gap-3">
-          <img src={logo} alt="Workshop Logo" className="w-10 h-10" />
-          <h1 className="text-2xl font-bold">Workshop</h1>
+          <img src={logo} alt="omoworkit Logo" className="w-10 h-10" />
+          <h1 className="text-2xl font-bold">omoworkit</h1>
         </div>
         <button
           onClick={() => navigate("/login")}
@@ -79,7 +79,7 @@ export default function LandingPage() {
       </main>
 
       <footer className="py-8 text-center text-gray-500 text-sm">
-        © 2026 Workshop • Connecting Workers and Clients
+        © 2026 omoworkit • Connecting Workers and Clients
       </footer>
     </div>
   );
