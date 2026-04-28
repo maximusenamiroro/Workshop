@@ -89,7 +89,7 @@ export default function NewArrivalsPage() {
     setStoryLoading(true);
 
     try {
-      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const since = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
 
       const { data, error } = await supabase
         .from("products")

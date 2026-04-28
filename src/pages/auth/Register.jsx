@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { FaEye, FaEyeSlash } from "react-icons/fa";
 import { businessCategories } from "../data/bussinesscategorie";
+import { useToast } from "../../hooks/useToast";
 
 export default function Signup() {
   const navigate = useNavigate();
@@ -23,6 +24,7 @@ export default function Signup() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const { showToast, ToastUI } = useToast();
 
   const countries = [
     "Nigeria", "Ghana", "Kenya", "South Africa",
@@ -117,12 +119,13 @@ export default function Signup() {
         }
       }
 
-      alert(`✅ Account created successfully as ${form.accountType}!`);
+      showToast(`✅ Account created successfully as ${form.accountType}!`, "success");
       navigate("/reels");
 
     } catch (err) {
       console.error("Signup error:", err);
       setError(err.message || "Failed to create account. Please try again.");
+      showToast("Failed to create account. Please try again.", "error");
     } finally {
       setLoading(false);
     }

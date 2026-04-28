@@ -5,7 +5,7 @@ import {
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { useAuth } from "../../context/AuthContext";
-
+import { useToast } from "../../hooks/useToast"
 export default function SellerProfile() {
   const navigate = useNavigate();
   const { user, role, logout } = useAuth();
@@ -35,6 +35,7 @@ export default function SellerProfile() {
   const [myReview, setMyReview] = useState("");
   const [ratingSubmitting, setRatingSubmitting] = useState(false);
   const [hoverRating, setHoverRating] = useState(0);
+  const { showToast, ToastUI } = useToast();
 
   const [profile, setProfile] = useState({
     full_name: "", country: "", avatar_url: "", bio: "",
@@ -221,9 +222,9 @@ export default function SellerProfile() {
       const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(fileName);
       await supabase.from("profiles").update({ avatar_url: urlData.publicUrl }).eq("id", user.id);
       setProfileImage(urlData.publicUrl);
-      alert("✅ Profile picture updated!");
+      showToast("✅ Profile picture updated!");
     } catch (err) {
-      alert("Failed to upload: " + err.message);
+     showToast("Failed to upload: " + err.message);
     }
   };
 
@@ -244,9 +245,9 @@ export default function SellerProfile() {
       if (error) throw error;
       setProfile(formData);
       setEditOpen(false);
-      alert("✅ Profile saved!");
+      showToast("✅ Profile saved!");
     } catch (err) {
-      alert("Failed to save: " + err.message);
+     showToast("Failed to save: " + err.message);
     } finally {
       setSaving(false);
     }
@@ -378,6 +379,12 @@ export default function SellerProfile() {
           <button onClick={() => setMenuOpen(!menuOpen)} className="p-2 text-gray-400 active:scale-90">
             <FaEllipsisV size={19} />
           </button>
+        )}
+          {menuOpen && (
+          <div className="absolute right-4 top-14 bg-zinc-900 border border-white/10 rounded-2xl p-2 text-sm z-50 w-40 shadow-xl">
+            <p className="p-3 hover:bg-white/10 rounded-xl cursor-pointer" onClick={() => { setMenuOpen(false); navigate("/seller-settings"); }}>⚙️ Settings</p>
+            <p className="p-3 hover:bg-white/10 rounded-xl cursor-pointer text-red-400" onClick={async () => { await logout(); navigate("/login"); }}>🚪 Logout</p>
+          </div>
         )}
       </div>
 

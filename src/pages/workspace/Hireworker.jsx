@@ -2,12 +2,14 @@ import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { useAuth } from "../../context/AuthContext";
+import { useToast } from "../../hooks/useToast";
 
 export default function HireWorker() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
+const { showToast, ToastUI } = useToast();
 
   const categoryParam = searchParams.get("category");
   const typeFilter = searchParams.get("type");
@@ -115,11 +117,11 @@ export default function HireWorker() {
 
   const handleHire = async () => {
     if (!job.trim() || !workerLocation.trim()) {
-      alert("Please fill in both job description and location");
+      showToast("Please fill in both job description and location");
       return;
     }
     if (!user) { navigate("/login"); return; }
-    if (!worker?.id) { alert("Worker not found"); return; }
+    if (!worker?.id) { showToast("Worker not found"); return; }
 
     try {
       setSubmitting(true);
@@ -134,10 +136,10 @@ export default function HireWorker() {
         });
 
       if (insertError) throw insertError;
-      alert("✅ Request sent successfully!");
+      showToast("✅ Request sent successfully!");
       navigate("/workspace");
     } catch (err) {
-      alert("Failed to send request: " + err.message);
+      showToast("Failed to send request: " + err.message);
     } finally {
       setSubmitting(false);
     }
@@ -243,6 +245,7 @@ export default function HireWorker() {
 
   return (
     <div className="min-h-screen bg-[#0B0F19] p-4 text-white pb-24">
+        <ToastUI />
       <button onClick={() => navigate(-1)} className="text-gray-400 hover:text-white mb-4 text-sm">
         ← Back
       </button>

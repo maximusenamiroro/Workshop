@@ -6,6 +6,7 @@ import {
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
+import { useToast } from "../hooks/useToast";
 
 const BOOKING_STATUS_COLOR = {
   accepted: "bg-green-500/20 text-green-400",
@@ -31,6 +32,7 @@ export default function SellerWorkstation() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const geoWatchRef = useRef(null);
+  const { showToast, ToastUI } = useToast();
 
   const [products, setProducts] = useState([]);
   const [bookings, setBookings] = useState([]);
@@ -162,7 +164,7 @@ export default function SellerWorkstation() {
         setLiveLoading(false);
       } else {
         if (!navigator.geolocation) {
-          alert("Geolocation is not supported by your browser");
+          showToast("Geolocation is not supported by your browser", "error");
           setLiveLoading(false);
           return;
         }
@@ -181,7 +183,6 @@ export default function SellerWorkstation() {
                   updated_at: new Date().toISOString(),
                 });
               if (error) throw error;
-
               setIsLive(true);
               setService(finalService);
 
@@ -204,14 +205,14 @@ export default function SellerWorkstation() {
                 { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
               );
             } catch (err) {
-              alert("Failed to go live: " + err.message);
+              showToast("Failed to go live: " + err.message, "error");
             } finally {
               setLiveLoading(false);
             }
           },
           (err) => {
             console.error("GPS error:", err);
-            alert("Please allow location access to go live.");
+            showToast("Please allow location access to go live.", "warning");
             setLiveLoading(false);
           },
           { enableHighAccuracy: true, timeout: 15000 }
@@ -219,7 +220,7 @@ export default function SellerWorkstation() {
         return;
       }
     } catch (err) {
-      alert("Failed: " + err.message);
+      showToast("Failed: " + err.message, "error");
       setLiveLoading(false);
     }
   };
@@ -228,16 +229,12 @@ export default function SellerWorkstation() {
     try {
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       if (!currentUser) return;
-
       const { data } = await supabase
         .from("products")
         .select("id, title, category, price, image_url, created_at")
         .eq("worker_id", currentUser.id)
         .order("created_at", { ascending: false });
-
       setProducts(data || []);
-
-      // Fetch view counts for each product
       if (data && data.length > 0) {
         await fetchProductViews(data.map(p => p.id));
       }
@@ -252,15 +249,11 @@ export default function SellerWorkstation() {
         .from("product_views")
         .select("product_id")
         .in("product_id", productIds);
-
       if (error) throw error;
-
-      // Count views per product
       const viewCounts = {};
       (data || []).forEach(v => {
         viewCounts[v.product_id] = (viewCounts[v.product_id] || 0) + 1;
       });
-
       setProductViews(viewCounts);
     } catch (err) {
       console.error("fetchProductViews failed:", err.message);
@@ -283,7 +276,6 @@ export default function SellerWorkstation() {
       }
 
       const productIds = workerProducts.map(p => p.id);
-
       const { data: ordersData, error } = await supabase
         .from("orders")
         .select("id, product_name, product_image_url, status, created_at, user_id, quantity, total_amount, product_id")
@@ -299,17 +291,13 @@ export default function SellerWorkstation() {
           .from("profiles")
           .select("id, full_name")
           .in("id", buyerIds);
-        (buyersData || []).forEach(b => {
-          buyerMap[b.id] = b.full_name;
-        });
+        (buyersData || []).forEach(b => { buyerMap[b.id] = b.full_name; });
       }
 
-      const merged = (ordersData || []).map(o => ({
+      setProductOrders((ordersData || []).map(o => ({
         ...o,
         buyer_name: buyerMap[o.user_id] || "Customer",
-      }));
-
-      setProductOrders(merged);
+      })));
     } catch (err) {
       console.error("fetchProductOrders failed:", err.message);
     }
@@ -320,29 +308,49 @@ export default function SellerWorkstation() {
       .from("orders")
       .update({ status })
       .eq("id", orderId);
-    if (error) alert("Failed to update: " + error.message);
+    if (error) showToast("Failed to update: " + error.message, "error");
     else fetchProductOrders();
   };
 
   const uploadProduct = async () => {
-    if (!form.title || !form.price) return alert("Title and price required");
+    if (!form.title || !form.price) {
+      showToast("Title and price required", "warning");
+      return;
+    }
     setUploading(true);
     try {
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       if (!currentUser) throw new Error("Not authenticated");
+
       let imageUrl = null;
       if (form.file) {
-        const ext = form.file.name.split(".").pop();
+        if (!form.file.type.startsWith("image/")) {
+          throw new Error("Please select an image file");
+        }
+        const sizeMB = form.file.size / (1024 * 1024);
+        if (sizeMB > 10) {
+          throw new Error(`Image is ${sizeMB.toFixed(1)}MB — please use an image under 10MB`);
+        }
+
+        const ext = form.file.name.split(".").pop().toLowerCase();
         const fileName = `${currentUser.id}_${Date.now()}.${ext}`;
+
         const { error: uploadError } = await supabase.storage
           .from("products")
-          .upload(fileName, form.file);
-        if (uploadError) throw uploadError;
+          .upload(fileName, form.file, {
+            cacheControl: "3600",
+            upsert: false,
+            contentType: form.file.type,
+          });
+
+        if (uploadError) throw new Error("Image upload failed: " + uploadError.message);
+
         const { data: urlData } = supabase.storage
           .from("products")
           .getPublicUrl(fileName);
         imageUrl = urlData.publicUrl;
       }
+
       const finalCategory = resolveCategory(service);
       const { error } = await supabase.from("products").insert({
         worker_id: currentUser.id,
@@ -352,13 +360,14 @@ export default function SellerWorkstation() {
         category: finalCategory,
         image_url: imageUrl,
       });
-      if (error) throw error;
+      if (error) throw new Error("Failed to save product: " + error.message);
+
       setForm({ title: "", description: "", price: "", file: null });
       setShowUpload(false);
       fetchProducts();
-      alert(`✅ Product posted under "${finalCategory}"`);
+      showToast(`Product posted under "${finalCategory}"`);
     } catch (err) {
-      alert("Upload failed: " + err.message);
+      showToast(err.message, "error");
     } finally {
       setUploading(false);
     }
@@ -372,8 +381,9 @@ export default function SellerWorkstation() {
         await supabase.storage.from("products").remove([fileName]);
       }
       fetchProducts();
+      showToast("Product deleted");
     } catch (err) {
-      console.error("deleteProduct failed:", err.message);
+      showToast("Failed to delete product", "error");
     }
   };
 
@@ -398,8 +408,11 @@ export default function SellerWorkstation() {
       .from("hire_requests")
       .update({ status })
       .eq("id", id);
-    if (error) alert("Failed to update: " + error.message);
-    else fetchBookings();
+    if (error) showToast("Failed to update: " + error.message, "error");
+    else {
+      showToast(`Booking ${status}`);
+      fetchBookings();
+    }
   };
 
   if (loading) return (
@@ -410,6 +423,7 @@ export default function SellerWorkstation() {
 
   return (
     <div className="min-h-screen bg-[#1A1A1A] text-white p-4 space-y-6 pb-24">
+      <ToastUI />
 
       {/* HEADER */}
       <div className="flex justify-between items-center">
@@ -430,9 +444,7 @@ export default function SellerWorkstation() {
       {/* CATEGORY */}
       <div className="bg-white/5 p-3 rounded-xl">
         <p className="text-sm text-gray-400">Your Category</p>
-        <p className="text-green-400 font-semibold">
-          {workerCategory || "General Worker"}
-        </p>
+        <p className="text-green-400 font-semibold">{workerCategory || "General Worker"}</p>
       </div>
 
       {/* LIVE SYSTEM */}
@@ -494,7 +506,6 @@ export default function SellerWorkstation() {
                   </div>
                   <div>
                     <p className="text-sm font-medium">{o.product_name}</p>
-                    {/* Buyer name → click to view profile */}
                     <button
                       onClick={() => navigate(`/seller-profile/${o.user_id}`)}
                       className="text-xs text-green-400 hover:underline text-left"
@@ -511,7 +522,6 @@ export default function SellerWorkstation() {
                   {o.status || "pending"}
                 </span>
               </div>
-
               <div className="flex gap-2 mt-2 flex-wrap">
                 {["shipping", "on the way", "arriving", "delivered"].map(s => (
                   <button
@@ -525,7 +535,6 @@ export default function SellerWorkstation() {
                   </button>
                 ))}
               </div>
-
               <button
                 onClick={() => navigate(`/inbox?user=${o.user_id}`)}
                 className="w-full mt-2 bg-white/10 hover:bg-white/20 py-1.5 rounded-lg text-xs transition"
@@ -537,7 +546,7 @@ export default function SellerWorkstation() {
         )}
       </div>
 
-      {/* MY PRODUCTS — with view counts */}
+      {/* MY PRODUCTS */}
       <div className="bg-white/5 p-4 rounded-xl">
         <div className="flex justify-between items-center mb-3">
           <h2 className="font-semibold">My Products</h2>
@@ -609,19 +618,15 @@ export default function SellerWorkstation() {
                 </div>
                 <div>
                   <p className="text-sm font-medium">{p.title}</p>
-                  <p className="text-xs text-gray-400">
-                    {p.category} • ₦{Number(p.price).toLocaleString()}
-                  </p>
-                  {/* VIEW COUNT */}
+                  <p className="text-xs text-gray-400">{p.category} • ₦{Number(p.price).toLocaleString()}</p>
                   <div className="flex items-center gap-1 mt-1">
                     <FaEye size={10} className="text-blue-400" />
                     <span className="text-xs text-blue-400">
                       {productViews[p.id] || 0} view{(productViews[p.id] || 0) !== 1 ? "s" : ""}
                     </span>
-                    {/* Only show 24h badge if posted in last 24h */}
-                    {Date.now() - new Date(p.created_at).getTime() < 24 * 60 * 60 * 1000 && (
+                    {Date.now() - new Date(p.created_at).getTime() < 48 * 60 * 60 * 1000 && (
                       <span className="text-[9px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded-full ml-1">
-                        24h status
+                        48h status
                       </span>
                     )}
                   </div>
@@ -653,7 +658,6 @@ export default function SellerWorkstation() {
                   {b.status || "pending"}
                 </span>
               </div>
-
               {(!b.status || b.status === "pending") && (
                 <div className="flex gap-2 mt-2">
                   <button
@@ -670,7 +674,6 @@ export default function SellerWorkstation() {
                   </button>
                 </div>
               )}
-
               {b.status === "accepted" && (
                 <button
                   onClick={() => navigate(`/inbox?user=${b.client_id}`)}

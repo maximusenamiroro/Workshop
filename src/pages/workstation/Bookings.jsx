@@ -93,7 +93,8 @@ export default function Bookings() {
       if (error) throw error;
       loadBookings();
     } catch (err) {
-      alert("Failed to update booking");
+      console.error("Error updating status:", err);
+      setError("Failed to update booking status");
     }
   };
 
