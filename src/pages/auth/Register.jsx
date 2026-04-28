@@ -168,7 +168,7 @@ export default function Signup() {
                 form.accountType === "worker" ? "bg-green-500" : "bg-gray-800"
               }`}
             >
-              Worker
+              Business Account
             </button>
           </div>
 
@@ -303,7 +303,7 @@ export default function Signup() {
           >
             {loading
               ? "Creating Account..."
-              : `Create ${form.accountType === "worker" ? "Worker" : "Client"} Account`
+              : `Create ${form.accountType === "worker" ? "Business" : "Client"} Account`
             }
           </button>
 
