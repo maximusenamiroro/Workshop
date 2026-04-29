@@ -239,7 +239,7 @@ function ReelCard({ reel, onReelUpdate }) {
         muted={muted}
         playsInline
         onClick={(e) => { e.stopPropagation(); togglePlay(); }}
-        className="absolute inset-0 w-full h-[80%] object-cover"
+        className="absolute inset-0 w-full h-[80%] object-contain flex justify-self-center"
       />
 
       {/* Dark gradient overlays */}
