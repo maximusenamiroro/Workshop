@@ -299,7 +299,7 @@ function ReelCard({ reel, onReelUpdate }) {
               e.stopPropagation();
               navigate(reel.type === "product" ? "/shop" : "/hire-worker");
             }}
-            className="bg-green-500 hover:bg-green-600 text-white px-5 py-2 rounded-full font-semibold text-sm active:scale-95 transition"
+            className="bg-green-500 hover:bg-green-600 text-white px-5 py-2 rounded-full font-semibold text-sm transition"
           >
             {reel.type === "product" ? "🛍️ Order Now" : "📅 Book Now"}
           </button>
