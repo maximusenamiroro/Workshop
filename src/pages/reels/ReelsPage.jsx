@@ -267,6 +267,21 @@ function ReelCard({ reel, onReelUpdate }) {
       {/* BOTTOM LEFT — Profile + Description + Action */}
       <div className="absolute bottom-20 left-4 right-16 z-10">
 
+
+{/* Action button */}
+        {showActionButton && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              navigate(reel.type === "product" ? "/shop" : "/hire-worker");
+            }}
+            className="bg-green-500 hover:bg-green-600 text-white px-5 py-2 mb-2.5 rounded-full font-semibold text-sm transition"
+          >
+            {reel.type === "product" ? "🛍️ Order Now" : "📅 Book Now"}
+          </button>
+        )}
+
+
         {/* Profile */}
         <div
           className="flex items-center gap-2 cursor-pointer mb-3"
@@ -292,18 +307,7 @@ function ReelCard({ reel, onReelUpdate }) {
           {reel.description}
         </p>
 
-        {/* Action button */}
-        {showActionButton && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              navigate(reel.type === "product" ? "/shop" : "/hire-worker");
-            }}
-            className="bg-green-500 hover:bg-green-600 text-white px-5 py-2 rounded-full font-semibold text-sm transition"
-          >
-            {reel.type === "product" ? "🛍️ Order Now" : "📅 Book Now"}
-          </button>
-        )}
+        
       </div>
 
       {/* RIGHT SIDE — Action buttons like TikTok */}
