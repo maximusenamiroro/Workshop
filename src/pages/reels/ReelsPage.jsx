@@ -228,7 +228,7 @@ function ReelCard({ reel, onReelUpdate }) {
   return (
     <div
       ref={containerRef}
-      className="h-screen snap-start w-full relative bg-black overflow-hidden"
+      className="h-[calc(100dvh-80px)] md:h-[100dvh] snap-start w-full relative bg-black overflow-hidden flex items-center justify-center"
       onClick={handleDoubleTap}
     >
       {/* VIDEO — full screen */}
@@ -239,7 +239,7 @@ function ReelCard({ reel, onReelUpdate }) {
         muted={muted}
         playsInline
         onClick={(e) => { e.stopPropagation(); togglePlay(); }}
-        className="absolute inset-0 w-full h-[80%] object-contain flex justify-self-center"
+      className="absolute inset-0 w-full h-full object-contain bg-black"
       />
 
       {/* Dark gradient overlays */}
