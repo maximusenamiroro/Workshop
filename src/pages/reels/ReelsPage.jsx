@@ -66,7 +66,7 @@ function ReelCard({ reel, onReelUpdate }) {
   const [saved, setSaved] = useState(false);
   const [comments, setComments] = useState([]);
   const [showComments, setShowComments] = useState(false);
-  const [muted, setMuted] = useState(false);
+  const [muted, setMuted] = useState(false); // Sound ON by default
   const [newComment, setNewComment] = useState("");
   const [isPlaying, setIsPlaying] = useState(false);
   const [showHeart, setShowHeart] = useState(false);
@@ -79,6 +79,7 @@ function ReelCard({ reel, onReelUpdate }) {
     fetchComments();
   }, [reel.id, user]);
 
+  // Auto play when visible
   useEffect(() => {
     const video = videoRef.current;
     const container = containerRef.current;
@@ -88,8 +89,9 @@ function ReelCard({ reel, onReelUpdate }) {
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
-            video.muted = false;
+            video.muted = false; // Try to play with sound
             video.play().catch(() => {
+              // Browser blocked autoplay with sound — fallback to muted
               video.muted = true;
               setMuted(true);
               video.play().catch(() => {});
@@ -156,6 +158,7 @@ function ReelCard({ reel, onReelUpdate }) {
     }
   };
 
+  // Double tap to like
   const handleDoubleTap = () => {
     const now = Date.now();
     if (now - lastTapRef.current < 300) {
@@ -221,14 +224,14 @@ function ReelCard({ reel, onReelUpdate }) {
   const username = reel.profiles?.full_name || "Unknown";
   const isOwnReel = user?.id === reel.user_id;
   const showActionButton = !isOwnReel && role === "client";
-
+  
   return (
     <div
       ref={containerRef}
       className="h-screen snap-start w-full relative bg-black overflow-hidden"
       onClick={handleDoubleTap}
     >
-      {/* VIDEO */}
+      {/* VIDEO — full screen */}
       <video
         ref={videoRef}
         src={reel.video_url}
@@ -239,130 +242,138 @@ function ReelCard({ reel, onReelUpdate }) {
         className="absolute inset-0 w-full h-full object-cover"
       />
 
-      {/* Gradient overlay */}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent pointer-events-none" />
+      {/* Dark gradient overlays */}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20 pointer-events-none" />
 
-      {/* Double tap heart */}
+      {/* Double tap heart animation */}
       {showHeart && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
-          <Heart size={90} className="text-red-500 fill-red-500 animate-ping" />
+          <Heart
+            size={80}
+            className="text-red-500 fill-red-500 animate-ping opacity-90"
+          />
         </div>
       )}
 
       {/* Play/Pause indicator */}
       {!isPlaying && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-          <div className="w-14 h-14 bg-black/50 rounded-full flex items-center justify-center backdrop-blur-sm">
-            <div className="w-0 h-0 border-t-[10px] border-t-transparent border-b-[10px] border-b-transparent border-l-[18px] border-l-white ml-1" />
+          <div className="w-16 h-16 bg-black/50 rounded-full flex items-center justify-center backdrop-blur-sm">
+            <div className="w-0 h-0 border-t-[12px] border-t-transparent border-b-[12px] border-b-transparent border-l-[22px] border-l-white ml-1" />
           </div>
         </div>
       )}
 
-      {/* ===== BOTTOM SECTION — sits above navbar (pb-20 = 80px navbar height) ===== */}
-      <div className="absolute bottom-0 left-0 right-0 pb-20 px-3 z-10 flex items-end justify-between gap-2">
+      {/* BOTTOM LEFT — Profile + Description + Action */}
+      <div className="absolute bottom-20 left-4 right-16 z-10">
 
-        {/* LEFT — Profile + Description + Action */}
-        <div className="flex-1 min-w-0 mr-2">
-
-          {/* Profile */}
-          <div
-            className="flex items-center gap-2 cursor-pointer mb-2"
-            onClick={(e) => { e.stopPropagation(); goToProfile(); }}
-          >
-            <div className="w-9 h-9 rounded-full bg-gray-600 overflow-hidden border-2 border-white flex-shrink-0">
-              {reel.profiles?.avatar_url ? (
-                <img src={reel.profiles.avatar_url} alt={username} className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-white font-bold text-sm">
-                  {username[0]}
-                </div>
-              )}
-            </div>
-            <p className="font-bold text-white text-sm truncate">@{username}</p>
+        {/* Profile */}
+        <div
+          className="flex items-center gap-2 cursor-pointer mb-3"
+          onClick={(e) => { e.stopPropagation(); goToProfile(); }}
+        >
+          <div className="w-11 h-11 rounded-full bg-gray-600 overflow-hidden border-2 border-white flex-shrink-0">
+            {reel.profiles?.avatar_url ? (
+              <img src={reel.profiles.avatar_url} alt={username} className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-white font-bold">
+                {username[0]}
+              </div>
+            )}
           </div>
-
-          {/* Description */}
-          <p className="text-white/90 text-xs leading-relaxed line-clamp-2 mb-2">
-            {reel.description}
-          </p>
-
-          {/* Action button */}
-          {showActionButton && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                navigate(reel.type === "product" ? "/shop" : "/hire-worker");
-              }}
-              className="bg-green-500 hover:bg-green-600 text-white px-4 py-1.5 rounded-full font-semibold text-xs active:scale-95 transition"
-            >
-              {reel.type === "product" ? "🛍️ Order Now" : "📅 Book Now"}
-            </button>
-          )}
+          <div>
+            <p className="font-bold text-white text-sm">@{username}</p>
+            <p className="text-gray-300 text-xs">View profile →</p>
+          </div>
         </div>
 
-        {/* RIGHT — Action icons */}
-        <div className="flex flex-col items-center gap-4 pb-1">
+        {/* Description */}
+        <p className="text-white text-sm leading-relaxed line-clamp-2 mb-3 drop-shadow">
+          {reel.description}
+        </p>
 
-          {/* Like */}
+        {/* Action button */}
+        {showActionButton && (
           <button
-            onClick={(e) => { e.stopPropagation(); toggleLike(); }}
-            className="flex flex-col items-center gap-0.5"
+            onClick={(e) => {
+              e.stopPropagation();
+              navigate(reel.type === "product" ? "/shop" : "/hire-worker");
+            }}
+            className="bg-green-500 hover:bg-green-600 text-white px-5 py-2 rounded-full font-semibold text-sm active:scale-95 transition"
           >
+            {reel.type === "product" ? "🛍️ Order Now" : "📅 Book Now"}
+          </button>
+        )}
+      </div>
+
+      {/* RIGHT SIDE — Action buttons like TikTok */}
+      <div className="absolute right-3 bottom-24 z-10 flex flex-col items-center gap-5">
+
+        {/* Like */}
+        <button
+          onClick={(e) => { e.stopPropagation(); toggleLike(); }}
+          className="flex flex-col items-center gap-1"
+        >
+          <div className="w-11 h-11 bg-black/30 backdrop-blur-sm rounded-full flex items-center justify-center">
             <Heart
-              size={26}
-              className={`transition-all drop-shadow ${liked ? "text-red-500 fill-red-500 scale-110" : "text-white"}`}
+              size={24}
+              className={`transition-all ${liked ? "text-red-500 fill-red-500 scale-110" : "text-white"}`}
             />
-            <span className="text-white text-[11px] font-medium drop-shadow">{likesCount}</span>
-          </button>
+          </div>
+          <span className="text-white text-xs font-medium drop-shadow">{likesCount}</span>
+        </button>
 
-          {/* Comment */}
+        {/* Comment */}
+        <button
+          onClick={(e) => { e.stopPropagation(); setShowComments(true); }}
+          className="flex flex-col items-center gap-1"
+        >
+          <div className="w-11 h-11 bg-black/30 backdrop-blur-sm rounded-full flex items-center justify-center">
+            <MessageCircle size={24} className="text-white" />
+          </div>
+          <span className="text-white text-xs font-medium drop-shadow">{comments.length}</span>
+        </button>
+
+        {/* Save — clients only */}
+        {role === "client" && (
           <button
-            onClick={(e) => { e.stopPropagation(); setShowComments(true); }}
-            className="flex flex-col items-center gap-0.5"
+            onClick={(e) => { e.stopPropagation(); toggleSave(); }}
+            className="flex flex-col items-center gap-1"
           >
-            <MessageCircle size={26} className="text-white drop-shadow" />
-            <span className="text-white text-[11px] font-medium drop-shadow">{comments.length}</span>
-          </button>
-
-          {/* Save — clients only */}
-          {role === "client" && (
-            <button
-              onClick={(e) => { e.stopPropagation(); toggleSave(); }}
-              className="flex flex-col items-center gap-0.5"
-            >
+            <div className="w-11 h-11 bg-black/30 backdrop-blur-sm rounded-full flex items-center justify-center">
               <Bookmark
-                size={26}
-                className={`transition-all drop-shadow ${saved ? "text-yellow-400 fill-yellow-400" : "text-white"}`}
+                size={24}
+                className={`transition-all ${saved ? "text-yellow-400 fill-yellow-400" : "text-white"}`}
               />
-              <span className="text-white text-[11px] font-medium drop-shadow">
-                {saved ? "Saved" : "Save"}
-              </span>
-            </button>
-          )}
-
-          {/* Share */}
-          <button
-            onClick={(e) => { e.stopPropagation(); navigator.share?.({ url: window.location.href }); }}
-            className="flex flex-col items-center gap-0.5"
-          >
-            <Share2 size={26} className="text-white drop-shadow" />
-            <span className="text-white text-[11px] font-medium drop-shadow">Share</span>
+            </div>
+            <span className="text-white text-xs font-medium drop-shadow">{saved ? "Saved" : "Save"}</span>
           </button>
+        )}
 
-          {/* Mute */}
-          <button
-            onClick={(e) => { e.stopPropagation(); toggleMute(); }}
-            className="flex flex-col items-center gap-0.5"
-          >
+        {/* Share */}
+        <button
+          onClick={(e) => { e.stopPropagation(); navigator.share?.({ url: window.location.href }); }}
+          className="flex flex-col items-center gap-1"
+        >
+          <div className="w-11 h-11 bg-black/30 backdrop-blur-sm rounded-full flex items-center justify-center">
+            <Share2 size={24} className="text-white" />
+          </div>
+          <span className="text-white text-xs font-medium drop-shadow">Share</span>
+        </button>
+
+        {/* Mute/Unmute */}
+        <button
+          onClick={(e) => { e.stopPropagation(); toggleMute(); }}
+          className="flex flex-col items-center gap-1"
+        >
+          <div className={`w-11 h-11 backdrop-blur-sm rounded-full flex items-center justify-center transition ${muted ? "bg-red-500/40" : "bg-black/30"}`}>
             {muted
-              ? <VolumeX size={26} className="text-red-400 drop-shadow" />
-              : <Volume2 size={26} className="text-white drop-shadow" />
+              ? <VolumeX size={24} className="text-white" />
+              : <Volume2 size={24} className="text-white" />
             }
-            <span className="text-white text-[11px] font-medium drop-shadow">
-              {muted ? "Muted" : "Sound"}
-            </span>
-          </button>
-        </div>
+          </div>
+          <span className="text-white text-xs font-medium drop-shadow">{muted ? "Muted" : "Sound"}</span>
+        </button>
       </div>
 
       {/* COMMENTS PANEL */}
@@ -375,16 +386,16 @@ function ReelCard({ reel, onReelUpdate }) {
             className="absolute bottom-0 left-0 right-0 h-[65%] bg-zinc-900 rounded-t-3xl p-4"
             onClick={(e) => e.stopPropagation()}
           >
+            {/* Handle bar */}
             <div className="w-12 h-1 bg-white/20 rounded-full mx-auto mb-4" />
 
             <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold text-white text-base">
-                Comments
-                {comments.length > 0 && (
-                  <span className="text-gray-400 text-sm font-normal ml-1">({comments.length})</span>
-                )}
+              <h3 className="font-bold text-white text-lg">
+                Comments {comments.length > 0 && <span className="text-gray-400 text-sm font-normal">({comments.length})</span>}
               </h3>
-              <button onClick={() => setShowComments(false)} className="text-gray-400 text-sm">Close</button>
+              <button onClick={() => setShowComments(false)} className="text-gray-400 text-sm">
+                Close
+              </button>
             </div>
 
             <div className="overflow-y-auto h-[55%] space-y-3 mb-4">
@@ -410,6 +421,7 @@ function ReelCard({ reel, onReelUpdate }) {
               )}
             </div>
 
+            {/* Comment input */}
             <div className="flex gap-2 items-center">
               <input
                 type="text"
@@ -422,7 +434,7 @@ function ReelCard({ reel, onReelUpdate }) {
               <button
                 onClick={handleAddComment}
                 disabled={!newComment.trim()}
-                className="bg-green-500 disabled:bg-gray-700 text-white px-4 py-2.5 rounded-full text-sm font-semibold transition active:scale-95"
+                className="bg-green-500 hover:bg-green-600 disabled:bg-gray-700 text-white px-4 py-2.5 rounded-full text-sm font-semibold transition active:scale-95"
               >
                 Post
               </button>

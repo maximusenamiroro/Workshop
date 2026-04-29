@@ -89,12 +89,6 @@ export default function ProductDetail() {
         >
           Track in Workspace
         </button>
-        <button
-          onClick={() => navigate("/shop")}
-          className="text-gray-400 text-sm underline"
-        >
-          Continue Shopping
-        </button>
       </div>
     );
   }

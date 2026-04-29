@@ -253,7 +253,6 @@ export default function BuyerProfile() {
               <div className="text-center py-12">
                 <div className="text-5xl mb-3 opacity-30">📦</div>
                 <p className="text-gray-500 text-xs">No orders yet</p>
-                <button onClick={() => navigate("/shop")} className="mt-4 bg-green-600 px-5 py-2.5 rounded-2xl text-xs font-semibold active:scale-95">Browse Shop</button>
               </div>
             ) : orders.map((o, i) => (
               <div key={o.id} className="bg-zinc-900 border border-white/10 rounded-xl p-3.5 flex justify-between items-center hover:border-white/20 transition-all">

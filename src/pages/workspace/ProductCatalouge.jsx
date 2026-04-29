@@ -147,12 +147,6 @@ export default function ProductCatalogue() {
           <div className="text-center mt-20">
             <p className="text-4xl mb-3">😕</p>
             <p className="text-gray-400">No products found</p>
-            <button
-              onClick={() => navigate("/shop")}
-              className="mt-4 text-green-400 text-sm underline"
-            >
-              View all products
-            </button>
           </div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">

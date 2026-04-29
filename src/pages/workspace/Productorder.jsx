@@ -122,12 +122,7 @@ export default function MyOrders() {
           {productOrders.length === 0 ? (
             <div className="text-center py-16 text-gray-400">
               <p>No product orders yet</p>
-              <button
-                onClick={() => navigate("/shop")}
-                className="mt-4 bg-green-600 hover:bg-green-700 px-6 py-3 rounded-xl"
-              >
-                Browse Shop
-              </button>
+            
             </div>
           ) : (
             productOrders.map((order) => (
