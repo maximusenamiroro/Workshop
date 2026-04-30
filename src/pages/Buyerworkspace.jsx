@@ -78,7 +78,7 @@ export default function BuyerWorkspace() {
   // Fetch only subcategories that have products posted in last 24h
   const fetchActiveSubCategories = async () => {
     try {
-      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const since = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
 
       // Get products with worker info
       const { data, error } = await supabase
@@ -171,7 +171,7 @@ export default function BuyerWorkspace() {
           <h2 className="font-semibold flex items-center gap-2">
             🆕 New Arrivals
             <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full">
-              24h only
+              48h only
             </span>
           </h2>
           <button
@@ -184,7 +184,7 @@ export default function BuyerWorkspace() {
 
         {activeSubCategories.length === 0 ? (
           <div className="bg-white/5 rounded-xl p-4 text-center">
-            <p className="text-gray-400 text-sm">No new products in last 24 hours</p>
+            <p className="text-gray-400 text-sm">No new products in last 48 hours</p>
           </div>
         ) : (
           <div className="flex gap-4 overflow-x-auto pb-3 scrollbar-hide">
