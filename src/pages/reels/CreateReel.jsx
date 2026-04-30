@@ -119,7 +119,7 @@ export default function CreateReel() {
   const sizeMB = video ? (video.size / (1024 * 1024)).toFixed(1) : null;
 
   return (
-    <div className="min-h-screen bg-black text-white p-4 pb-24 flex flex-col gap-4">
+    <div className="h-full overflow-y-auto bg-black text-white p-4 pb-24 flex flex-col gap-4">
     <ToastUI/>
       {/* HEADER */}
       <div className="flex items-center gap-3 pt-2">

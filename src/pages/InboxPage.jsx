@@ -121,7 +121,6 @@ export default function Inbox() {
         return;
       }
 
-      // Fetch profiles with avatar and country
       const { data: profiles } = await supabase
         .from("profiles")
         .select("id, full_name, avatar_url, country, role")
@@ -232,7 +231,6 @@ export default function Inbox() {
     if (chat.role === "worker") {
       navigate(`/seller-profile/${chat.id}`);
     }
-    // clients don't have a public profile page to navigate to
   };
 
   const renderStatus = (msg) => {
@@ -253,7 +251,6 @@ export default function Inbox() {
     return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" });
   };
 
-  // Avatar component
   const Avatar = ({ name, avatar_url, size = "w-10 h-10", textSize = "text-sm" }) => (
     <div className={`${size} rounded-full overflow-hidden bg-green-600 flex items-center justify-center font-bold ${textSize} flex-shrink-0`}>
       {avatar_url ? (
@@ -269,10 +266,10 @@ export default function Inbox() {
   );
 
   return (
-    <div className="flex h-screen bg-[#0f0f0f] text-white overflow-hidden">
+    <div className="h-full overflow-hidden bg-[#0f0f0f] text-white flex flex-col">
 
       {/* CHAT LIST */}
-      <div className={`${activeChat ? "hidden md:flex" : "flex"} flex-col w-full md:w-[35%] border-r border-white/10`}>
+      <div className={`${activeChat ? "hidden md:flex" : "flex"} flex-col w-full md:w-[35%] border-r border-white/10 h-full`}>
         <div className="p-4 border-b border-white/10">
           <h2 className="text-lg font-semibold">Inbox</h2>
         </div>
@@ -339,10 +336,10 @@ export default function Inbox() {
       </div>
 
       {/* CHAT SCREEN */}
-      <div className={`${activeChat ? "flex" : "hidden md:flex"} flex-col flex-1`}>
+      <div className={`${activeChat ? "flex" : "hidden md:flex"} flex-col flex-1 h-full`}>
         {activeChat ? (
           <>
-            {/* Chat header — click profile to navigate */}
+            {/* Chat Header */}
             <div className="p-4 border-b border-white/10 flex items-center gap-3">
               <button className="md:hidden" onClick={() => setActiveChat(null)}>
                 <FaArrowLeft />
@@ -372,7 +369,7 @@ export default function Inbox() {
               </button>
             </div>
 
-            {/* Messages */}
+            {/* Messages Area - This is the scrolling part */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
               {messages.length === 0 && (
                 <p className="text-center text-gray-500 text-sm mt-10">
@@ -398,7 +395,7 @@ export default function Inbox() {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Input */}
+            {/* Input Area */}
             <div className="p-3 border-t border-white/10 flex gap-2">
               <input
                 value={message}

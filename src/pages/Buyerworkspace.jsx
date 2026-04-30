@@ -38,7 +38,6 @@ const BUSINESS_CATEGORIES = {
   "Other Business": ["Other"],
 };
 
-// All subcategories flat list for matching
 const ALL_SUBCATEGORIES = Object.values(BUSINESS_CATEGORIES).flat();
 
 const SUBCATEGORY_EMOJI = {
@@ -75,12 +74,10 @@ export default function BuyerWorkspace() {
     setLoading(false);
   };
 
-  // Fetch only subcategories that have products posted in last 24h
   const fetchActiveSubCategories = async () => {
     try {
       const since = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
 
-      // Get products with worker info
       const { data, error } = await supabase
         .from("products")
         .select("id, worker_id, category")
@@ -88,7 +85,6 @@ export default function BuyerWorkspace() {
 
       if (error) throw error;
 
-      // Get worker categories from workers table
       const workerIds = [...new Set((data || []).map(p => p.worker_id).filter(Boolean))];
 
       let workerCategoryMap = {};
@@ -103,17 +99,11 @@ export default function BuyerWorkspace() {
         });
       }
 
-      // Collect all subcategories from products
-      // Use worker's registered category first, fallback to product category
       const subCatSet = new Set();
       (data || []).forEach(p => {
         const workerCat = workerCategoryMap[p.worker_id];
         const cat = workerCat || p.category;
-        if (cat && ALL_SUBCATEGORIES.includes(cat)) {
-          subCatSet.add(cat);
-        } else if (cat) {
-          subCatSet.add(cat);
-        }
+        if (cat) subCatSet.add(cat);
       });
 
       setActiveSubCategories([...subCatSet]);
@@ -128,13 +118,13 @@ export default function BuyerWorkspace() {
     ), [search]);
 
   if (loading) return (
-    <div className="min-h-screen bg-[#0f0f0f] flex items-center justify-center text-white">
+    <div className="h-full flex items-center justify-center bg-[#0f0f0f] text-white">
       <div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-[#0f0f0f] text-white p-4 pb-24">
+    <div className="h-full overflow-y-auto bg-[#0f0f0f] text-white p-4 pb-28">
 
       {/* HEADER */}
       <div className="flex justify-between items-center mb-6 px-1">
@@ -165,7 +155,7 @@ export default function BuyerWorkspace() {
         />
       </div>
 
-      {/* NEW ARRIVALS — subcategory circles */}
+      {/* NEW ARRIVALS */}
       <div className="mb-8">
         <div className="flex justify-between items-center mb-3">
           <h2 className="font-semibold flex items-center gap-2">
@@ -194,7 +184,6 @@ export default function BuyerWorkspace() {
                 onClick={() => navigate(`/new-arrivals?category=${encodeURIComponent(cat)}`)}
                 className="flex flex-col items-center min-w-[72px] cursor-pointer"
               >
-                {/* Status circle with green ring */}
                 <div className="w-16 h-16 rounded-full p-[3px] bg-gradient-to-tr from-green-400 to-green-600">
                   <div className="w-full h-full rounded-full bg-[#1a1a1a] border-2 border-[#0f0f0f] flex items-center justify-center">
                     <span className="text-2xl">

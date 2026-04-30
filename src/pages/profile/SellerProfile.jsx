@@ -363,7 +363,7 @@ export default function SellerProfile() {
   }
 
   return (
-    <div ref={containerRef} className="min-h-screen bg-black text-white pb-20 overflow-x-hidden">
+   <div ref={containerRef} className="h-full overflow-y-auto bg-black text-white  overflow-x-hidden">
 
       {/* HEADER - Compact */}
      <div className="sticky top-0 z-50 bg-black/95 backdrop-blur-lg border-b border-white/10 px-4 py-3 flex items-center justify-between">

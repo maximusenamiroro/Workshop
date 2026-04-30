@@ -416,13 +416,14 @@ export default function SellerWorkstation() {
   };
 
   if (loading) return (
-    <div className="min-h-screen bg-[#1A1A1A] flex items-center justify-center text-white">
+    <div className="h-full flex items-center justify-center bg-[#1A1A1A] text-white">
       <div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-[#1A1A1A] text-white p-4 space-y-6 pb-24">
+    <div className="h-full overflow-y-auto bg-[#1A1A1A] text-white p-4 space-y-6 pb-28">
+
       <ToastUI />
 
       {/* HEADER */}

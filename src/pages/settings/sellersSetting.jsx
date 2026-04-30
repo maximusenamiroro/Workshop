@@ -100,7 +100,7 @@ export default function SellerSettings() {
   );
 
   return (
-    <div className="min-h-screen bg-black text-white pb-20">
+    <div className="h-full overflow-y-auto bg-black text-white pb-20">
 
       {/* HEADER */}
       <div className="px-5 py-6 border-b border-zinc-800 flex items-center gap-3">

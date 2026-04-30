@@ -177,7 +177,7 @@ export default function BuyerProfile() {
   );
 
   return (
-    <div ref={containerRef} className="min-h-screen bg-black text-white pb-20 overflow-x-hidden">
+     <div ref={containerRef} className="h-full overflow-y-auto bg-black text-white pb-28 overflow-x-hidden">
       <ToastUI />
 
       {/* HEADER */}

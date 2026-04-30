@@ -143,7 +143,7 @@ export default function NewArrivalsPage() {
   );
 
   return (
-   <div className="min-h-screen bg-black text-white pb-20">
+   <div className="h-full overflow-y-auto text-white pb-20">
 
       {/* HEADER */}
   <div className="flex items-center gap-3 px-4 py-3 border-b border-white/10 sticky top-0 bg-black/80 backdrop-blur-md z-20">
