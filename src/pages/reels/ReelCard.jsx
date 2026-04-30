@@ -252,7 +252,7 @@ export default function ReelCard({ reel, onReelUpdate }) {
 
           {/* Action buttons — only for clients viewing other workers */}
           {showActionButton && (
-            <div className="flex mb-5 gap-2">
+            <div className="flex mb-10 gap-2">
               {reel.type === "product" ? (
                 // Product reel — show Order Now → goes to shop/worker profile
                 <button
@@ -283,16 +283,16 @@ export default function ReelCard({ reel, onReelUpdate }) {
         </div>
 
         {/* RIGHT — Action icons */}
-        <div className="flex flex-col items-center gap-4 pb-1 flex-shrink-0">
+        <div className="flex flex-col items-center gap-4 pb-5 flex-shrink-0">
 
           {/* Like */}
           <button
             onClick={(e) => { e.stopPropagation(); toggleLike(); }}
             className="flex flex-col items-center gap-0.5"
           >
-            <div className="w-10 h-10 bg-black/40 backdrop-blur rounded-full flex items-center justify-center">
+            <div className="w-8 h-8 bg-black/40 backdrop-blur rounded-full flex items-center justify-center">
               <Heart
-                size={22}
+                size={19}
                 className={`transition-all ${liked ? "text-red-500 fill-red-500 scale-110" : "text-white"}`}
               />
             </div>
@@ -304,8 +304,8 @@ export default function ReelCard({ reel, onReelUpdate }) {
             onClick={(e) => { e.stopPropagation(); setShowComments(true); }}
             className="flex flex-col items-center gap-0.5"
           >
-            <div className="w-10 h-10 bg-black/40 backdrop-blur rounded-full flex items-center justify-center">
-              <MessageCircle size={22} className="text-white" />
+            <div className="w-8 h-8 bg-black/40 backdrop-blur rounded-full flex items-center justify-center">
+              <MessageCircle size={19} className="text-white" />
             </div>
             <span className="text-white text-[11px] font-medium drop-shadow">{comments.length}</span>
           </button>
@@ -316,9 +316,9 @@ export default function ReelCard({ reel, onReelUpdate }) {
               onClick={(e) => { e.stopPropagation(); toggleSave(); }}
               className="flex flex-col items-center gap-0.5"
             >
-              <div className="w-10 h-10 bg-black/40 backdrop-blur rounded-full flex items-center justify-center">
+              <div className="w-8 h-8 bg-black/40 backdrop-blur rounded-full flex items-center justify-center">
                 <Bookmark
-                  size={22}
+                  size={19}
                   className={`transition-all ${saved ? "text-yellow-400 fill-yellow-400" : "text-white"}`}
                 />
               </div>
@@ -333,8 +333,8 @@ export default function ReelCard({ reel, onReelUpdate }) {
             onClick={(e) => { e.stopPropagation(); navigator.share?.({ url: window.location.href }); }}
             className="flex flex-col items-center gap-0.5"
           >
-            <div className="w-10 h-10 bg-black/40 backdrop-blur rounded-full flex items-center justify-center">
-              <Share2 size={22} className="text-white" />
+            <div className="w-8 h-8 bg-black/40 backdrop-blur rounded-full flex items-center justify-center">
+              <Share2 size={19} className="text-white" />
             </div>
             <span className="text-white text-[11px] font-medium drop-shadow">Share</span>
           </button>
@@ -344,10 +344,10 @@ export default function ReelCard({ reel, onReelUpdate }) {
             onClick={(e) => { e.stopPropagation(); toggleMute(); }}
             className="flex flex-col items-center gap-0.5"
           >
-            <div className={`w-10 h-10 backdrop-blur rounded-full flex items-center justify-center transition ${muted ? "bg-red-500/50" : "bg-black/40"}`}>
+            <div className={`w-8 h-8 backdrop-blur rounded-full flex items-center justify-center transition ${muted ? "bg-red-500/50" : "bg-black/40"}`}>
               {muted
-                ? <VolumeX size={22} className="text-white" />
-                : <Volume2 size={22} className="text-white" />
+                ? <VolumeX size={19} className="text-white" />
+                : <Volume2 size={19} className="text-white" />
               }
             </div>
             <span className="text-white text-[11px] font-medium drop-shadow">
