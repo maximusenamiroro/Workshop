@@ -74,43 +74,44 @@ export default function BuyerWorkspace() {
     setLoading(false);
   };
 
-  const fetchActiveSubCategories = async () => {
-    try {
-      const since = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+ const fetchActiveSubCategories = async () => {
+  try {
+    const since = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
 
-      const { data, error } = await supabase
-        .from("products")
-        .select("id, worker_id, category")
-        .gte("created_at", since);
+    const { data, error } = await supabase
+      .from("products")
+      .select("id, worker_id, category")
+      .gte("created_at", since);
 
-      if (error) throw error;
+    if (error) throw error;
 
-      const workerIds = [...new Set((data || []).map(p => p.worker_id).filter(Boolean))];
+    const workerIds = [...new Set((data || []).map(p => p.worker_id).filter(Boolean))];
 
-      let workerCategoryMap = {};
-      if (workerIds.length > 0) {
-        const { data: workersData } = await supabase
-          .from("workers")
-          .select("id, category")
-          .in("id", workerIds);
+    let workerCategoryMap = {};
+    if (workerIds.length > 0) {
+      const { data: workersData } = await supabase
+        .from("workers")
+        .select("id, category")
+        .in("id", workerIds);
 
-        (workersData || []).forEach(w => {
-          workerCategoryMap[w.id] = w.category;
-        });
-      }
-
-      const subCatSet = new Set();
-      (data || []).forEach(p => {
-        const workerCat = workerCategoryMap[p.worker_id];
-        const cat = workerCat || p.category;
-        if (cat) subCatSet.add(cat);
+      (workersData || []).forEach(w => {
+        if (w.category) workerCategoryMap[w.id] = w.category;
       });
-
-      setActiveSubCategories([...subCatSet]);
-    } catch (err) {
-      console.error("fetchActiveSubCategories error:", err.message);
     }
-  };
+
+    // Build subcategory list — use worker's registered category
+    // This ensures clicking the circle filters correctly in NewArrivalsPage
+    const subCatSet = new Set();
+    (data || []).forEach(p => {
+      const cat = workerCategoryMap[p.worker_id] || p.category;
+      if (cat) subCatSet.add(cat);
+    });
+
+    setActiveSubCategories([...subCatSet]);
+  } catch (err) {
+    console.error("fetchActiveSubCategories error:", err.message);
+  }
+};
 
   const filteredCategories = useMemo(() =>
     Object.keys(BUSINESS_CATEGORIES).filter(c =>

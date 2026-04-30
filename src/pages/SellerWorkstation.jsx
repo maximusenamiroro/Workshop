@@ -144,86 +144,179 @@ export default function SellerWorkstation() {
   };
 
   const toggleLive = async () => {
-    setLiveLoading(true);
-    try {
-      const { data: { user: currentUser } } = await supabase.auth.getUser();
-      if (!currentUser) throw new Error("Not authenticated");
-      const finalService = resolveCategory(service);
+  setLiveLoading(true);
 
-      if (isLive) {
-        if (geoWatchRef.current) {
-          navigator.geolocation.clearWatch(geoWatchRef.current);
-          geoWatchRef.current = null;
-        }
+  try {
+    const { data: { user: currentUser } } = await supabase.auth.getUser();
+    if (!currentUser) throw new Error("Not authenticated");
+
+    const finalService = resolveCategory(service);
+
+    // ===== GO OFFLINE =====
+    if (isLive) {
+      if (geoWatchRef.current) {
+        navigator.geolocation.clearWatch(geoWatchRef.current);
+        geoWatchRef.current = null;
+      }
+      const { error } = await supabase
+        .from("live_workers")
+        .delete()
+        .eq("worker_id", currentUser.id);
+      if (error) throw error;
+      setIsLive(false);
+      setLiveLoading(false);
+      showToast("You are now offline");
+      return;
+    }
+
+    // ===== GO LIVE =====
+
+    // Check if geolocation is available at all
+    if (!navigator.geolocation) {
+      // Go live without GPS — some devices don't support it
+      const { error } = await supabase
+        .from("live_workers")
+        .upsert({
+          worker_id: currentUser.id,
+          service: finalService,
+          updated_at: new Date().toISOString(),
+          last_seen: new Date().toISOString(),
+        });
+      if (error) throw error;
+      setIsLive(true);
+      setService(finalService);
+      showToast("You are now live (no GPS on this device)");
+      setLiveLoading(false);
+      return;
+    }
+
+    // Try to get GPS — with a manual timeout fallback
+    let gpsResolved = false;
+
+    const gpsTimeout = setTimeout(async () => {
+      if (gpsResolved) return;
+      gpsResolved = true;
+
+      // GPS took too long — go live without coordinates
+      console.warn("GPS timeout — going live without coordinates");
+      try {
         const { error } = await supabase
           .from("live_workers")
-          .delete()
-          .eq("worker_id", currentUser.id);
+          .upsert({
+            worker_id: currentUser.id,
+            service: finalService,
+            updated_at: new Date().toISOString(),
+            last_seen: new Date().toISOString(),
+          });
         if (error) throw error;
-        setIsLive(false);
+        setIsLive(true);
+        setService(finalService);
+        showToast("You are now live (GPS unavailable)");
+      } catch (err) {
+        showToast("Failed to go live: " + err.message, "error");
+      } finally {
         setLiveLoading(false);
-      } else {
-        if (!navigator.geolocation) {
-          showToast("Geolocation is not supported by your browser", "error");
-          setLiveLoading(false);
-          return;
-        }
-
-        navigator.geolocation.getCurrentPosition(
-          async (pos) => {
-            try {
-              const { error } = await supabase
-                .from("live_workers")
-                .upsert({
-                  worker_id: currentUser.id,
-                  service: finalService,
-                  lat: pos.coords.latitude,
-                  lng: pos.coords.longitude,
-                  last_seen: new Date().toISOString(),
-                  updated_at: new Date().toISOString(),
-                });
-              if (error) throw error;
-              setIsLive(true);
-              setService(finalService);
-
-              geoWatchRef.current = navigator.geolocation.watchPosition(
-                async (position) => {
-                  try {
-                    await supabase
-                      .from("live_workers")
-                      .update({
-                        lat: position.coords.latitude,
-                        lng: position.coords.longitude,
-                        last_seen: new Date().toISOString(),
-                      })
-                      .eq("worker_id", currentUser.id);
-                  } catch (err) {
-                    console.error("GPS update error:", err.message);
-                  }
-                },
-                (err) => console.error("GPS watch error:", err),
-                { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
-              );
-            } catch (err) {
-              showToast("Failed to go live: " + err.message, "error");
-            } finally {
-              setLiveLoading(false);
-            }
-          },
-          (err) => {
-            console.error("GPS error:", err);
-            showToast("Please allow location access to go live.", "warning");
-            setLiveLoading(false);
-          },
-          { enableHighAccuracy: true, timeout: 15000 }
-        );
-        return;
       }
-    } catch (err) {
-      showToast("Failed: " + err.message, "error");
-      setLiveLoading(false);
-    }
-  };
+    }, 8000); // 8 second timeout
+
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        if (gpsResolved) return;
+        gpsResolved = true;
+        clearTimeout(gpsTimeout);
+
+        try {
+          const { error } = await supabase
+            .from("live_workers")
+            .upsert({
+              worker_id: currentUser.id,
+              service: finalService,
+              lat: pos.coords.latitude,
+              lng: pos.coords.longitude,
+              last_seen: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            });
+          if (error) throw error;
+
+          setIsLive(true);
+          setService(finalService);
+          showToast("🟢 You are now live!");
+
+          // Start watching GPS
+          geoWatchRef.current = navigator.geolocation.watchPosition(
+            async (position) => {
+              try {
+                await supabase
+                  .from("live_workers")
+                  .update({
+                    lat: position.coords.latitude,
+                    lng: position.coords.longitude,
+                    last_seen: new Date().toISOString(),
+                  })
+                  .eq("worker_id", currentUser.id);
+              } catch (err) {
+                console.error("GPS update error:", err.message);
+              }
+            },
+            (err) => console.warn("GPS watch error:", err.message),
+            {
+              enableHighAccuracy: false, // false is more reliable on mobile
+              maximumAge: 10000,
+              timeout: 15000,
+            }
+          );
+        } catch (err) {
+          showToast("Failed to go live: " + err.message, "error");
+        } finally {
+          setLiveLoading(false);
+        }
+      },
+      async (err) => {
+        if (gpsResolved) return;
+        gpsResolved = true;
+        clearTimeout(gpsTimeout);
+
+        console.warn("GPS denied or error:", err.code, err.message);
+
+        // If permission denied — go live without GPS instead of failing
+        if (err.code === 1) {
+          // PERMISSION_DENIED
+          try {
+            const { error: dbError } = await supabase
+              .from("live_workers")
+              .upsert({
+                worker_id: currentUser.id,
+                service: finalService,
+                updated_at: new Date().toISOString(),
+                last_seen: new Date().toISOString(),
+              });
+            if (dbError) throw dbError;
+            setIsLive(true);
+            setService(finalService);
+            showToast("🟢 Live (enable location for tracking)", "warning");
+          } catch (dbErr) {
+            showToast("Failed to go live: " + dbErr.message, "error");
+          }
+        } else if (err.code === 2) {
+          // POSITION_UNAVAILABLE
+          showToast("Location unavailable. Try again.", "warning");
+        } else {
+          // TIMEOUT or other
+          showToast("Location timed out. Try again.", "warning");
+        }
+        setLiveLoading(false);
+      },
+      {
+        enableHighAccuracy: false, // false is more reliable on mobile
+        timeout: 7000,
+        maximumAge: 30000,
+      }
+    );
+  } catch (err) {
+    showToast("Failed: " + err.message, "error");
+    setLiveLoading(false);
+  }
+};
 
   const fetchProducts = async () => {
     try {

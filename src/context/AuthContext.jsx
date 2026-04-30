@@ -11,43 +11,70 @@ export const useAuth = () => {
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [role, setRole] = useState(null);
+  const [role, setRole] = useState(() => {
+    // Load cached role instantly — no DB call needed on first render
+    return localStorage.getItem("userRole") || null;
+  });
   const [loading, setLoading] = useState(true);
-  const initializedRef = useRef(false); // Use ref instead of state
+  const initializedRef = useRef(false);
 
   const loadProfile = async (userId) => {
-  try {
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", userId)
-      .maybeSingle(); // changed from .single()
+    try {
+      // Check cache first
+      const cachedRole = localStorage.getItem("userRole");
+      if (cachedRole) {
+        setRole(cachedRole);
+        // Still fetch in background to ensure it's fresh
+        supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", userId)
+          .maybeSingle()
+          .then(({ data }) => {
+            if (data?.role && data.role !== cachedRole) {
+              setRole(data.role);
+              localStorage.setItem("userRole", data.role);
+            }
+          });
+        return;
+      }
 
-    if (error) throw error;
-    setRole(data?.role || null);
-  } catch (err) {
-    if (err.name !== "AbortError") {
-      console.error("Failed to load profile:", err.message);
+      // No cache — fetch from DB
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", userId)
+        .maybeSingle();
+
+      if (error) throw error;
+      const userRole = data?.role || null;
+      setRole(userRole);
+      if (userRole) localStorage.setItem("userRole", userRole);
+    } catch (err) {
+      if (err.name !== "AbortError") {
+        console.error("Failed to load profile:", err.message);
+      }
+      setRole(null);
     }
-    setRole(null);
-  }
-};
+  };
 
   useEffect(() => {
     let mounted = true;
 
-    // Step 1 - handle initial session
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!mounted) return;
       if (session?.user) {
         setUser(session.user);
         await loadProfile(session.user.id);
+      } else {
+        // No session — clear cache
+        localStorage.removeItem("userRole");
+        setRole(null);
       }
       setLoading(false);
       initializedRef.current = true;
     });
 
-    // Step 2 - handle auth events
     const { data: listener } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (!mounted) return;
@@ -56,6 +83,7 @@ export const AuthProvider = ({ children }) => {
         if (event === "SIGNED_OUT") {
           setUser(null);
           setRole(null);
+          localStorage.removeItem("userRole");
           setLoading(false);
           return;
         }
@@ -77,7 +105,7 @@ export const AuthProvider = ({ children }) => {
       mounted = false;
       listener.subscription.unsubscribe();
     };
-  }, []); // Empty dependency array — runs once only
+  }, []);
 
   const logout = async () => {
     try {
@@ -87,6 +115,7 @@ export const AuthProvider = ({ children }) => {
     } finally {
       setUser(null);
       setRole(null);
+      localStorage.removeItem("userRole");
     }
   };
 

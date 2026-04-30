@@ -1,56 +1,52 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, lazy, Suspense } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-
-// Layout
 import MainLayout from "../layouts/MainLayout";
 
-// Pages
-import Landing from "../pages/Landing";
+// Eagerly load auth pages only
 import Login from "../pages/auth/Login";
 import Signup from "../pages/auth/Register";
 import ResetPassword from "../pages/auth/resetpassword";
-import ReelsPage from "../pages/reels/ReelsPage";
-import Workspace from "../pages/Buyerworkspace";
-import Workstation from "../pages/SellerWorkstation";
-import Inbox from "../pages/InboxPage";
-import CreateReel from "../pages/reels/CreateReel";
-import Activity from "../pages/workspace/Activity";
-import Bookings from "../pages/workstation/Bookings";
-import LiveService from "../pages/workstation/LiveService";
-import BookingDashboard from "../pages/workspace/bookingdashborad";
-import HireWorker from "../pages/workspace/Hireworker";
-import LiveServices from "../pages/workspace/LiveService";
-import Tracking from "../pages/workspace/Tracking";
-import Sellersetting from "../pages/settings/sellersSetting";
-import Settings from "../pages/settings/Settings";
-import SellerProfile from "../pages/profile/SellerProfile";
-import BuyerProfile from "../pages/profile/BuyerProfile";
-import ProductCatalogue from "../pages/workspace/ProductCatalouge";
-import SubCategoriesPage from "../pages/workspace/SubCategoriesPage";
-import ProductDetail from "../pages/workspace/ProductDetails";
-import SavedReels from "../pages/reels/SavedReels";
-import BrowseCategories from "../pages/workspace/BrowseCategories";
-import MyOrders from "../pages/workspace/Productorder";
-import NewArrivalsPage from "../pages/workspace/NewArrivalsPage";
+import Landing from "../pages/Landing";
 
-// ============ PROTECTED ROUTE ============
+// Lazy load everything else
+const ReelsPage = lazy(() => import("../pages/reels/ReelsPage"));
+const Workspace = lazy(() => import("../pages/Buyerworkspace"));
+const Workstation = lazy(() => import("../pages/SellerWorkstation"));
+const Inbox = lazy(() => import("../pages/InboxPage"));
+const CreateReel = lazy(() => import("../pages/reels/CreateReel"));
+const SavedReels = lazy(() => import("../pages/reels/SavedReels"));
+const Bookings = lazy(() => import("../pages/workstation/Bookings"));
+const HireWorker = lazy(() => import("../pages/workspace/Hireworker"));
+const Tracking = lazy(() => import("../pages/workspace/Tracking"));
+const SellerProfile = lazy(() => import("../pages/profile/SellerProfile"));
+const BuyerProfile = lazy(() => import("../pages/profile/BuyerProfile"));
+const ProductCatalogue = lazy(() => import("../pages/workspace/ProductCatalouge"));
+const SubCategoriesPage = lazy(() => import("../pages/workspace/SubCategoriesPage"));
+const ProductDetail = lazy(() => import("../pages/workspace/ProductDetails"));
+const MyOrders = lazy(() => import("../pages/workspace/Productorder"));
+const NewArrivalsPage = lazy(() => import("../pages/workspace/NewArrivalsPage"));
+const BookingDashboard = lazy(() => import("../pages/workspace/bookingdashborad"));
+const BrowseCategories = lazy(() => import("../pages/workspace/BrowseCategories"));
+const Activity = lazy(() => import("../pages/workspace/Activity"));
+const LiveService = lazy(() => import("../pages/workstation/LiveService"));
+const LiveServices = lazy(() => import("../pages/workspace/LiveService"));
+const Sellersetting = lazy(() => import("../pages/settings/sellersSetting"));
+const Settings = lazy(() => import("../pages/settings/Settings"));
+
+const PageLoader = () => (
+  <div className="h-screen bg-black flex items-center justify-center">
+    <div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+  </div>
+);
+
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { user, role, loading } = useAuth();
 
   if (loading || (user && allowedRoles && !role)) {
-    return (
-      <div className="h-screen bg-black flex items-center justify-center text-white">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-gray-400 text-sm">Loading...</p>
-        </div>
-      </div>
-    );
+    return <PageLoader />;
   }
 
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
+  if (!user) return <Navigate to="/login" replace />;
 
   if (allowedRoles && !allowedRoles.includes(role)) {
     return <Navigate to="/reels" replace />;
@@ -59,334 +55,61 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
   return children;
 };
 
-// ============ PUBLIC ROUTE ============
 const PublicRoute = ({ children }) => {
   const { user, loading } = useAuth();
-
-  if (loading) {
-    return (
-      <div className="h-screen bg-black flex items-center justify-center text-white">
-        <div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
-
-  if (user) {
-    return <Navigate to="/reels" replace />;
-  }
-
+  if (loading) return <PageLoader />;
+  if (user) return <Navigate to="/reels" replace />;
   return children;
 };
 
 export default function AppRoutes() {
   return (
     <BrowserRouter>
-      <Routes>
-        {/* Public Routes */}
-        <Route
-          path="/"
-          element={
-            <PublicRoute>
-              <Landing />
-            </PublicRoute>
-          }
-        />
-        <Route
-          path="/login"
-          element={
-            <PublicRoute>
-              <Login />
-            </PublicRoute>
-          }
-        />
-        <Route
-          path="/signup"
-          element={
-            <PublicRoute>
-              <Signup />
-            </PublicRoute>
-          }
-        />
-        <Route path="/reset-password" element={<ResetPassword />} />
+      <Suspense fallback={<PageLoader />}>
+        <Routes>
+          {/* Public */}
+          <Route path="/" element={<PublicRoute><Landing /></PublicRoute>} />
+          <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
+          <Route path="/signup" element={<PublicRoute><Signup /></PublicRoute>} />
+          <Route path="/reset-password" element={<ResetPassword />} />
 
-        {/* Reels */}
-        <Route
-          path="/reels"
-          element={
-            <ProtectedRoute>
-              <MainLayout>
-                <ReelsPage />
-              </MainLayout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/saved-reels"
-          element={
-            <ProtectedRoute allowedRoles={["client"]}>
-              <MainLayout>
-                <SavedReels />
-              </MainLayout>
-            </ProtectedRoute>
-          }
-        />
-        {/* Client Routes */}
-        <Route
-          path="/workspace"
-          element={
-            <ProtectedRoute allowedRoles={["client"]}>
-              <MainLayout>
-                <Workspace />
-              </MainLayout>
-            </ProtectedRoute>
-          }
-        />
+          {/* Reels */}
+          <Route path="/reels" element={<ProtectedRoute><MainLayout><ReelsPage /></MainLayout></ProtectedRoute>} />
+          <Route path="/saved-reels" element={<ProtectedRoute allowedRoles={["client"]}><MainLayout><SavedReels /></MainLayout></ProtectedRoute>} />
+          <Route path="/create-reel" element={<ProtectedRoute allowedRoles={["worker"]}><MainLayout><CreateReel /></MainLayout></ProtectedRoute>} />
 
-        <Route
-          path="/buyer-profile"
-          element={
-            <ProtectedRoute allowedRoles={["client"]}>
-              <MainLayout>
-                <BuyerProfile />
-              </MainLayout>
-            </ProtectedRoute>
-          }
-        />
+          {/* Client */}
+          <Route path="/workspace" element={<ProtectedRoute allowedRoles={["client"]}><MainLayout><Workspace /></MainLayout></ProtectedRoute>} />
+          <Route path="/buyer-profile" element={<ProtectedRoute allowedRoles={["client"]}><MainLayout><BuyerProfile /></MainLayout></ProtectedRoute>} />
+          <Route path="/subcategories" element={<ProtectedRoute allowedRoles={["client"]}><MainLayout><SubCategoriesPage /></MainLayout></ProtectedRoute>} />
+          <Route path="/my-orders" element={<ProtectedRoute allowedRoles={["client"]}><MainLayout><MyOrders /></MainLayout></ProtectedRoute>} />
+          <Route path="/new-arrivals" element={<ProtectedRoute allowedRoles={["client"]}><MainLayout><NewArrivalsPage /></MainLayout></ProtectedRoute>} />
+          <Route path="/hire-worker" element={<ProtectedRoute allowedRoles={["client"]}><MainLayout><HireWorker /></MainLayout></ProtectedRoute>} />
+          <Route path="/hire-worker/:id" element={<ProtectedRoute allowedRoles={["client"]}><MainLayout><HireWorker /></MainLayout></ProtectedRoute>} />
+          <Route path="/booking-dashboard" element={<ProtectedRoute allowedRoles={["client"]}><MainLayout><BookingDashboard /></MainLayout></ProtectedRoute>} />
+          <Route path="/browse-categories" element={<ProtectedRoute allowedRoles={["client"]}><MainLayout><BrowseCategories /></MainLayout></ProtectedRoute>} />
+          <Route path="/shop" element={<ProtectedRoute allowedRoles={["client"]}><MainLayout><ProductCatalogue /></MainLayout></ProtectedRoute>} />
+          <Route path="/product/:id" element={<ProtectedRoute allowedRoles={["client"]}><MainLayout><ProductDetail /></MainLayout></ProtectedRoute>} />
+          <Route path="/live-services" element={<ProtectedRoute allowedRoles={["client"]}><MainLayout><LiveServices /></MainLayout></ProtectedRoute>} />
+          <Route path="/tracking/:bookingId" element={<ProtectedRoute allowedRoles={["client"]}><Tracking /></ProtectedRoute>} />
 
-        <Route
-          path="/subcategories"
-          element={
-            <ProtectedRoute allowedRoles={["client"]}>
-              <MainLayout>
-                <SubCategoriesPage />
-              </MainLayout>
-            </ProtectedRoute>
-          }
-        />
+          {/* Worker */}
+          <Route path="/workstation" element={<ProtectedRoute allowedRoles={["worker"]}><MainLayout><Workstation /></MainLayout></ProtectedRoute>} />
+          <Route path="/seller-profile" element={<ProtectedRoute allowedRoles={["worker"]}><MainLayout><SellerProfile /></MainLayout></ProtectedRoute>} />
+          <Route path="/Bookings" element={<ProtectedRoute allowedRoles={["worker"]}><MainLayout><Bookings /></MainLayout></ProtectedRoute>} />
+          <Route path="/live-service" element={<ProtectedRoute allowedRoles={["worker"]}><MainLayout><LiveService /></MainLayout></ProtectedRoute>} />
+          <Route path="/activity" element={<ProtectedRoute allowedRoles={["worker"]}><MainLayout><Activity /></MainLayout></ProtectedRoute>} />
+          <Route path="/seller-settings" element={<ProtectedRoute allowedRoles={["worker"]}><MainLayout><Sellersetting /></MainLayout></ProtectedRoute>} />
 
-        <Route
-          path="/my-orders"
-          element={
-            <ProtectedRoute allowedRoles={["client"]}>
-              <MainLayout>
-                <MyOrders />
-              </MainLayout>
-            </ProtectedRoute>
-          }
-        />
+          {/* Shared */}
+          <Route path="/seller-profile/:id" element={<ProtectedRoute allowedRoles={["client", "worker"]}><MainLayout><SellerProfile /></MainLayout></ProtectedRoute>} />
+          <Route path="/inbox" element={<ProtectedRoute><MainLayout><Inbox /></MainLayout></ProtectedRoute>} />
+          <Route path="/settings" element={<ProtectedRoute><MainLayout><Settings /></MainLayout></ProtectedRoute>} />
 
-        <Route
-          path="/new-arrivals"
-          element={
-            <ProtectedRoute allowedRoles={["client"]}>
-              <MainLayout>
-                <NewArrivalsPage />
-              </MainLayout>
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/hire-worker"
-          element={
-            <ProtectedRoute allowedRoles={["client"]}>
-              <MainLayout>
-                <HireWorker />
-              </MainLayout>
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/hire-worker/:id"
-          element={
-            <ProtectedRoute allowedRoles={["client"]}>
-              <MainLayout>
-                <HireWorker />
-              </MainLayout>
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/booking-dashboard"
-          element={
-            <ProtectedRoute allowedRoles={["client"]}>
-              <MainLayout>
-                <BookingDashboard />
-              </MainLayout>
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/browse-categories"
-          element={
-            <ProtectedRoute allowedRoles={["client"]}>
-              <MainLayout>
-                <BrowseCategories />
-              </MainLayout>
-            </ProtectedRoute>
-          }
-        />
-
-        {/* Shop Routes — NEW */}
-        <Route
-          path="/shop"
-          element={
-            <ProtectedRoute allowedRoles={["client"]}>
-              <MainLayout>
-                <ProductCatalogue />
-              </MainLayout>
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/product/:id"
-          element={
-            <ProtectedRoute allowedRoles={["client"]}>
-              <MainLayout>
-                <ProductDetail />
-              </MainLayout>
-            </ProtectedRoute>
-          }
-        />
-
-        {/* Worker Routes */}
-        <Route
-          path="/workstation"
-          element={
-            <ProtectedRoute allowedRoles={["worker"]}>
-              <MainLayout>
-                <Workstation />
-              </MainLayout>
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/seller-profile"
-          element={
-            <ProtectedRoute allowedRoles={["worker"]}>
-              <MainLayout>
-                <SellerProfile />
-              </MainLayout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/seller-profile/:id"
-          element={
-            <ProtectedRoute allowedRoles={["client", "worker"]}>
-              <MainLayout>
-                <SellerProfile />
-              </MainLayout>
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/create-reel"
-          element={
-            <ProtectedRoute allowedRoles={["worker"]}>
-              <MainLayout>
-                <CreateReel />
-              </MainLayout>
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/activity"
-          element={
-            <ProtectedRoute allowedRoles={["worker"]}>
-              <MainLayout>
-                <Activity />
-              </MainLayout>
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/Bookings"
-          element={
-            <ProtectedRoute allowedRoles={["worker"]}>
-              <MainLayout>
-                <Bookings />
-              </MainLayout>
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/live-service"
-          element={
-            <ProtectedRoute allowedRoles={["worker"]}>
-              <MainLayout>
-                <LiveService />
-              </MainLayout>
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/live-services"
-          element={
-            <ProtectedRoute allowedRoles={["client"]}>
-              <MainLayout>
-                <LiveServices />
-              </MainLayout>
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/tracking/:bookingId"
-          element={
-            <ProtectedRoute allowedRoles={["client"]}>
-              <Tracking />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/seller-settings"
-          element={
-            <ProtectedRoute allowedRoles={["worker"]}>
-              <MainLayout>
-                <Sellersetting />
-              </MainLayout>
-            </ProtectedRoute>
-          }
-        />
-
-        {/* Common Routes */}
-        <Route
-          path="/inbox"
-          element={
-            <ProtectedRoute>
-              <MainLayout>
-                <Inbox />
-              </MainLayout>
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/settings"
-          element={
-            <ProtectedRoute>
-              <MainLayout>
-                <Settings />
-              </MainLayout>
-            </ProtectedRoute>
-          }
-        />
-
-        {/* Fallback */}
-        <Route path="*" element={<Navigate to="/reels" replace />} />
-      </Routes>
+          {/* Fallback */}
+          <Route path="*" element={<Navigate to="/reels" replace />} />
+        </Routes>
+      </Suspense>
     </BrowserRouter>
   );
 }
