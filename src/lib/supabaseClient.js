@@ -10,4 +10,14 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
     detectSessionInUrl: false,
     lockAcquireTimeout: 10000, // Give more time before stealing lock
   },
+  realtime: {
+    params: {
+      eventsPerSecond: 10,
+    },
+  },
+  global: {
+    headers: {
+      "x-application-name": "workshop-app",
+    },
+  },
 });
