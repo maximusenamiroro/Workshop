@@ -252,7 +252,7 @@ export default function ReelCard({ reel, onReelUpdate }) {
 
           {/* Action buttons — only for clients viewing other workers */}
           {showActionButton && (
-            <div className="flex gap-2">
+            <div className="flex mb-5 gap-2">
               {reel.type === "product" ? (
                 // Product reel — show Order Now → goes to shop/worker profile
                 <button
