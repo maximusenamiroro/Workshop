@@ -48,7 +48,7 @@ export default function NewArrivalsPage() {
 
   const fetchAllWorkers = async () => {
     try {
-      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const since = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
 
       const { data, error } = await supabase
         .from("products")
@@ -143,27 +143,28 @@ export default function NewArrivalsPage() {
   );
 
   return (
-    <div className="min-h-screen bg-[#0f0f0f] text-white pb-24">
+   <div className="min-h-screen bg-black text-white pb-20">
 
       {/* HEADER */}
-      <div className="flex items-center gap-3 p-4 border-b border-white/10">
-        <button onClick={() => navigate(-1)}>
-          <FaArrowLeft className="text-gray-400" />
-        </button>
-        <div>
-          <h1 className="font-bold text-lg">New Arrivals</h1>
-          <p className="text-xs text-gray-400">Products posted in last 24 hours</p>
-        </div>
-      </div>
+  <div className="flex items-center gap-3 px-4 py-3 border-b border-white/10 sticky top-0 bg-black/80 backdrop-blur-md z-20">
+  <button onClick={() => navigate(-1)} className="p-2 rounded-full hover:bg-white/10">
+    <FaArrowLeft className="text-gray-300" />
+  </button>
+
+  <div>
+    <h1 className="font-semibold text-base">New Arrivals</h1>
+    <p className="text-xs text-gray-400">Last 48 hours</p>
+  </div>
+</div>
 
       {/* WORKERS GRID */}
       {workers.length === 0 ? (
         <div className="flex flex-col items-center justify-center mt-20 gap-3 text-gray-400">
           <p className="text-4xl">📦</p>
-          <p>No new products in the last 24 hours</p>
+          <p>No new products in the last 48 hours</p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-3 p-4">
+        <div className="grid md:grid-cols-2 gap-3 p-4">
           {workers.map((w) => (
             <button
               key={w.worker_id}
@@ -308,40 +309,51 @@ export default function NewArrivalsPage() {
               )}
 
               {/* Product info overlay at bottom */}
-              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black via-black/60 to-transparent p-5 z-10">
-                <p className="font-bold text-lg text-white">
-                  {storyProducts[storyIndex]?.title}
-                </p>
-                {storyProducts[storyIndex]?.description && (
-                  <p className="text-sm text-gray-300 mt-1 line-clamp-2">
-                    {storyProducts[storyIndex]?.description}
-                  </p>
-                )}
-                <div className="flex items-center justify-between mt-3">
-                  <p className="text-green-400 font-bold text-lg">
-                    ₦{Number(storyProducts[storyIndex]?.price || 0).toLocaleString()}
-                  </p>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => navigate(`/seller-profile/${storyWorker.worker_id}`)}
-                      className="bg-white/20 text-white px-4 py-2 rounded-full text-sm font-semibold"
-                    >
-                      View Profile
-                    </button>
-                    <button
-                      onClick={() => navigate(`/product/${storyProducts[storyIndex]?.id}`)}
-                      className="bg-green-600 text-white px-4 py-2 rounded-full text-sm font-semibold"
-                    >
-                      Order Now
-                    </button>
-                  </div>
-                </div>
+<div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black via-black/80 to-transparent p-4 mb-10 z-10">
+  
+  {/* Title */}
+  <p className="font-semibold text-base md:text-lg text-white leading-tight line-clamp-1">
+    {storyProducts[storyIndex]?.title}
+  </p>
 
-                {/* Story counter */}
-                <p className="text-xs text-white/50 text-center mt-3">
-                  {storyIndex + 1} of {storyProducts.length}
-                </p>
-              </div>
+  {/* Description */}
+  {storyProducts[storyIndex]?.description && (
+    <p className="text-xs md:text-sm text-gray-300 mt-1 line-clamp-2">
+      {storyProducts[storyIndex]?.description}
+    </p>
+  )}
+
+  {/* Price + Buttons */}
+  <div className="flex items-center justify-between mt-5">
+    
+    {/* Price */}
+    <p className="text-green-400 font-bold text-xl md:text-2xl">
+      ₦{Number(storyProducts[storyIndex]?.price || 0).toLocaleString()}
+    </p>
+
+    {/* Buttons */}
+    <div className="flex gap-2">
+      <button
+        onClick={() => navigate(`/seller-profile/${storyWorker.worker_id}`)}
+        className="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-full text-xs md:text-sm font-medium transition-all"
+      >
+        View Profile
+      </button>
+      <button
+        onClick={() => navigate(`/product/${storyProducts[storyIndex]?.id}`)}
+        className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-full text-xs md:text-sm font-medium transition-all"
+      >
+        Order Now
+      </button>
+    </div>
+  </div>
+
+  {/* Story Counter */}
+  <p className="text-[10px] text-white/50 text-center mt-3">
+    {storyIndex + 1} of {storyProducts.length}
+  </p>
+
+</div>
             </div>
           )}
         </div>
