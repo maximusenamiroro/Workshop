@@ -56,12 +56,12 @@ export default function MainLayout({ children }) {
       </div>
 
       {/* MAIN CONTENT */}
-      <div className="flex-1 overflow-y-auto pb-24 md:pb-0">
+      <div className="flex-1 overflow-y-auto md:pb-0">
         {children}
       </div>
 
       {/* MOBILE BOTTOM NAV — fixed like TikTok */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-black/95 backdrop-blur-md border-t border-white/10 flex justify-around items-center py-2 safe-area-inset-bottom">
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-black/95 backdrop-blur-md border-t border-white/10 flex justify-around items-center py-1.5 safe-area-inset-bottom">
         <NavItem
           icon={<Home size={24} />}
           label="Home"
