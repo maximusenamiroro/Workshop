@@ -220,7 +220,7 @@ export default function ReelCard({ reel, onReelUpdate }) {
       )}
 
       {/* BOTTOM CONTENT — pb-20 keeps above navbar */}
-      <div className="absolute bottom-0 left-0 right-0 pb-20 px-3 z-10 flex items-end gap-2">
+      <div className="absolute bottom-0 left-0 right-0 pb-8 px-3 z-10 flex items-end gap-2">
 
         {/* LEFT — Profile + Description + Action */}
         <div className="flex-1 min-w-0 mr-2">
