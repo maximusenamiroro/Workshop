@@ -46,22 +46,22 @@ export default function ReelsPage() {
   );
 
   return (
-    <div className="h-screen w-full bg-black flex">
+    <div className="h-full w-full bg-black flex">
 
       {/* Desktop — centered column with side padding */}
       <div
         className="
-          w-full md:w-[420px] md:mx-auto
-          h-screen overflow-y-scroll
-          snap-y snap-mandatory scroll-smooth
-          relative
+           w-full md:w-[420px] md:mx-auto
+    h-full overflow-y-scroll
+    snap-y snap-mandatory scroll-smooth
+    relative
         "
         style={{ scrollSnapType: "y mandatory", WebkitOverflowScrolling: "touch" }}
       >
         {reels.map((reel) => (
           <div
             key={reel.id}
-            className="h-screen w-full flex-shrink-0 snap-start relative bg-black overflow-hidden"
+            className="h-full w-full flex-shrink-0 snap-start relative bg-black overflow-hidden"
           >
             <Suspense fallback={
               <div className="h-full w-full bg-black flex items-center justify-center">
