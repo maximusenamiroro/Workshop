@@ -112,22 +112,47 @@ export default function BuyerProfile() {
   };
 
   const changeProfile = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    try {
-      setProfileImage(URL.createObjectURL(file));
-      const fileExt = file.name.split(".").pop();
-      const fileName = `${user.id}/avatar.${fileExt}`;
-      const { error: uploadError } = await supabase.storage.from("avatars").upload(fileName, file, { upsert: true });
-      if (uploadError) throw uploadError;
-      const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(fileName);
-      await supabase.from("profiles").update({ avatar_url: urlData.publicUrl }).eq("id", user.id);
-      setProfileImage(urlData.publicUrl);
-      showToast("Profile picture updated!");
-    } catch (err) {
-      showToast("Failed to upload: " + err.message, "error");
-    }
-  };
+  const file = e.target.files[0];
+  if (!file) return;
+
+  if (!file.type.startsWith("image/")) {
+    showToast("Please select an image file", "error");
+    return;
+  }
+  const sizeMB = file.size / (1024 * 1024);
+  if (sizeMB > 5) {
+    showToast(`Image is ${sizeMB.toFixed(1)}MB — please use an image under 5MB`, "error");
+    return;
+  }
+
+  // Show preview immediately
+  setProfileImage(URL.createObjectURL(file));
+  showToast("Uploading...", "warning");
+
+  try {
+    const fileExt = file.name.split(".").pop().toLowerCase();
+    const fileName = `${user.id}/avatar.${fileExt}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("avatars")
+      .upload(fileName, file, {
+        upsert: true,
+        contentType: file.type,
+        cacheControl: "3600",
+      });
+
+    if (uploadError) throw uploadError;
+
+    const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(fileName);
+    const freshUrl = `${urlData.publicUrl}?t=${Date.now()}`;
+    await supabase.from("profiles").update({ avatar_url: urlData.publicUrl }).eq("id", user.id);
+    setProfileImage(freshUrl);
+    showToast("Profile picture updated!");
+  } catch (err) {
+    setProfileImage(profile.avatar_url || null);
+    showToast("Failed to upload: " + err.message, "error");
+  }
+};
 
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 

@@ -143,13 +143,13 @@ export default function SellerWorkstation() {
     );
   };
 
-  const toggleLive = async () => {
+  // ===== REPLACE toggleLive =====
+const toggleLive = async () => {
   setLiveLoading(true);
 
   try {
     const { data: { user: currentUser } } = await supabase.auth.getUser();
     if (!currentUser) throw new Error("Not authenticated");
-
     const finalService = resolveCategory(service);
 
     // ===== GO OFFLINE =====
@@ -158,73 +158,47 @@ export default function SellerWorkstation() {
         navigator.geolocation.clearWatch(geoWatchRef.current);
         geoWatchRef.current = null;
       }
-      const { error } = await supabase
-        .from("live_workers")
-        .delete()
-        .eq("worker_id", currentUser.id);
-      if (error) throw error;
+      await supabase.from("live_workers").delete().eq("worker_id", currentUser.id);
       setIsLive(false);
       setLiveLoading(false);
       showToast("You are now offline");
       return;
     }
 
-    // ===== GO LIVE =====
+    // ===== GO LIVE — location is REQUIRED =====
 
-    // Check if geolocation is available at all
+    // Step 1 — check if geolocation API exists
     if (!navigator.geolocation) {
-      // Go live without GPS — some devices don't support it
-      const { error } = await supabase
-        .from("live_workers")
-        .upsert({
-          worker_id: currentUser.id,
-          service: finalService,
-          updated_at: new Date().toISOString(),
-          last_seen: new Date().toISOString(),
-        });
-      if (error) throw error;
-      setIsLive(true);
-      setService(finalService);
-      showToast("You are now live (no GPS on this device)");
+      showToast("Your device does not support location. Cannot go live.", "error");
       setLiveLoading(false);
       return;
     }
 
-    // Try to get GPS — with a manual timeout fallback
-    let gpsResolved = false;
-
-    const gpsTimeout = setTimeout(async () => {
-      if (gpsResolved) return;
-      gpsResolved = true;
-
-      // GPS took too long — go live without coordinates
-      console.warn("GPS timeout — going live without coordinates");
+    // Step 2 — check current permission state if browser supports it
+    if (navigator.permissions) {
       try {
-        const { error } = await supabase
-          .from("live_workers")
-          .upsert({
-            worker_id: currentUser.id,
-            service: finalService,
-            updated_at: new Date().toISOString(),
-            last_seen: new Date().toISOString(),
-          });
-        if (error) throw error;
-        setIsLive(true);
-        setService(finalService);
-        showToast("You are now live (GPS unavailable)");
-      } catch (err) {
-        showToast("Failed to go live: " + err.message, "error");
-      } finally {
-        setLiveLoading(false);
+        const permissionStatus = await navigator.permissions.query({ name: "geolocation" });
+
+        if (permissionStatus.state === "denied") {
+          showToast(
+            "Location is blocked. Please enable it in your browser/device settings to go live.",
+            "error"
+          );
+          setLiveLoading(false);
+          return;
+        }
+      } catch (permErr) {
+        // permissions API not supported — proceed and let getCurrentPosition handle it
+        console.warn("Permissions API not supported:", permErr.message);
       }
-    }, 8000); // 8 second timeout
+    }
+
+    // Step 3 — request location (this triggers the permission popup if not yet granted)
+    showToast("Getting your location...", "warning");
 
     navigator.geolocation.getCurrentPosition(
+      // SUCCESS — got location
       async (pos) => {
-        if (gpsResolved) return;
-        gpsResolved = true;
-        clearTimeout(gpsTimeout);
-
         try {
           const { error } = await supabase
             .from("live_workers")
@@ -242,7 +216,7 @@ export default function SellerWorkstation() {
           setService(finalService);
           showToast("🟢 You are now live!");
 
-          // Start watching GPS
+          // Start watching location
           geoWatchRef.current = navigator.geolocation.watchPosition(
             async (position) => {
               try {
@@ -259,11 +233,7 @@ export default function SellerWorkstation() {
               }
             },
             (err) => console.warn("GPS watch error:", err.message),
-            {
-              enableHighAccuracy: false, // false is more reliable on mobile
-              maximumAge: 10000,
-              timeout: 15000,
-            }
+            { enableHighAccuracy: false, maximumAge: 10000, timeout: 15000 }
           );
         } catch (err) {
           showToast("Failed to go live: " + err.message, "error");
@@ -271,47 +241,43 @@ export default function SellerWorkstation() {
           setLiveLoading(false);
         }
       },
-      async (err) => {
-        if (gpsResolved) return;
-        gpsResolved = true;
-        clearTimeout(gpsTimeout);
 
-        console.warn("GPS denied or error:", err.code, err.message);
+      // ERROR — location denied or unavailable
+      (err) => {
+        console.error("GPS error:", err.code, err.message);
 
-        // If permission denied — go live without GPS instead of failing
         if (err.code === 1) {
           // PERMISSION_DENIED
-          try {
-            const { error: dbError } = await supabase
-              .from("live_workers")
-              .upsert({
-                worker_id: currentUser.id,
-                service: finalService,
-                updated_at: new Date().toISOString(),
-                last_seen: new Date().toISOString(),
-              });
-            if (dbError) throw dbError;
-            setIsLive(true);
-            setService(finalService);
-            showToast("🟢 Live (enable location for tracking)", "warning");
-          } catch (dbErr) {
-            showToast("Failed to go live: " + dbErr.message, "error");
-          }
+          showToast(
+            "Location access denied. Go to your browser settings and allow location for this site.",
+            "error"
+          );
         } else if (err.code === 2) {
           // POSITION_UNAVAILABLE
-          showToast("Location unavailable. Try again.", "warning");
+          showToast(
+            "Could not get your location. Make sure your device location/GPS is turned on.",
+            "error"
+          );
+        } else if (err.code === 3) {
+          // TIMEOUT
+          showToast(
+            "Location request timed out. Check that GPS is enabled and try again.",
+            "error"
+          );
         } else {
-          // TIMEOUT or other
-          showToast("Location timed out. Try again.", "warning");
+          showToast("Location error. Please enable location and try again.", "error");
         }
+
         setLiveLoading(false);
       },
+
       {
-        enableHighAccuracy: false, // false is more reliable on mobile
-        timeout: 7000,
-        maximumAge: 30000,
+        enableHighAccuracy: false,
+        timeout: 12000,
+        maximumAge: 0, // always get fresh location
       }
     );
+
   } catch (err) {
     showToast("Failed: " + err.message, "error");
     setLiveLoading(false);
@@ -405,66 +371,66 @@ export default function SellerWorkstation() {
     else fetchProductOrders();
   };
 
-  const uploadProduct = async () => {
-    if (!form.title || !form.price) {
-      showToast("Title and price required", "warning");
-      return;
-    }
-    setUploading(true);
-    try {
-      const { data: { user: currentUser } } = await supabase.auth.getUser();
-      if (!currentUser) throw new Error("Not authenticated");
+  // ===== REPLACE uploadProduct =====
+const uploadProduct = async () => {
+  if (!form.title) {
+    showToast("Title is required", "warning");
+    return;
+  }
+  setUploading(true);
+  try {
+    const { data: { user: currentUser } } = await supabase.auth.getUser();
+    if (!currentUser) throw new Error("Not authenticated");
 
-      let imageUrl = null;
-      if (form.file) {
-        if (!form.file.type.startsWith("image/")) {
-          throw new Error("Please select an image file");
-        }
-        const sizeMB = form.file.size / (1024 * 1024);
-        if (sizeMB > 10) {
-          throw new Error(`Image is ${sizeMB.toFixed(1)}MB — please use an image under 10MB`);
-        }
-
-        const ext = form.file.name.split(".").pop().toLowerCase();
-        const fileName = `${currentUser.id}_${Date.now()}.${ext}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from("products")
-          .upload(fileName, form.file, {
-            cacheControl: "3600",
-            upsert: false,
-            contentType: form.file.type,
-          });
-
-        if (uploadError) throw new Error("Image upload failed: " + uploadError.message);
-
-        const { data: urlData } = supabase.storage
-          .from("products")
-          .getPublicUrl(fileName);
-        imageUrl = urlData.publicUrl;
+    let imageUrl = null;
+    if (form.file) {
+      if (!form.file.type.startsWith("image/")) {
+        throw new Error("Please select an image file");
+      }
+      const sizeMB = form.file.size / (1024 * 1024);
+      if (sizeMB > 10) {
+        throw new Error(`Image is ${sizeMB.toFixed(1)}MB — please use an image under 10MB`);
       }
 
-      const finalCategory = resolveCategory(service);
-      const { error } = await supabase.from("products").insert({
-        worker_id: currentUser.id,
-        title: form.title,
-        description: form.description || "",
-        price: parseFloat(form.price),
-        category: finalCategory,
-        image_url: imageUrl,
-      });
-      if (error) throw new Error("Failed to save product: " + error.message);
+      const ext = form.file.name.split(".").pop().toLowerCase();
+      const fileName = `${currentUser.id}_${Date.now()}.${ext}`;
 
-      setForm({ title: "", description: "", price: "", file: null });
-      setShowUpload(false);
-      fetchProducts();
-      showToast(`Product posted under "${finalCategory}"`);
-    } catch (err) {
-      showToast(err.message, "error");
-    } finally {
-      setUploading(false);
+      const { error: uploadError } = await supabase.storage
+        .from("products")
+        .upload(fileName, form.file, {
+          cacheControl: "3600",
+          upsert: false,
+          contentType: form.file.type,
+        });
+
+      if (uploadError) throw new Error("Image upload failed: " + uploadError.message);
+
+      const { data: urlData } = supabase.storage.from("products").getPublicUrl(fileName);
+      imageUrl = urlData.publicUrl;
     }
-  };
+
+    const finalCategory = resolveCategory(service);
+    const { error } = await supabase.from("products").insert({
+      worker_id: currentUser.id,
+      title: form.title,
+      description: form.description || "",
+      // Price is optional — null if not provided
+      price: form.price ? parseFloat(form.price) : null,
+      category: finalCategory,
+      image_url: imageUrl,
+    });
+    if (error) throw new Error("Failed to save product: " + error.message);
+
+    setForm({ title: "", description: "", price: "", file: null });
+    setShowUpload(false);
+    fetchProducts();
+    showToast(`Product posted under "${finalCategory}"`);
+  } catch (err) {
+    showToast(err.message, "error");
+  } finally {
+    setUploading(false);
+  }
+};
 
   const deleteProduct = async (product) => {
     try {
@@ -649,55 +615,82 @@ export default function SellerWorkstation() {
           </button>
         </div>
 
-        {showUpload && (
-          <div className="space-y-2 mb-4 bg-black/20 p-3 rounded-xl">
-            <input
-              placeholder="Title *"
-              value={form.title}
-              className="w-full p-2 bg-black/30 rounded text-white placeholder-gray-500 outline-none"
-              onChange={(e) => setForm({ ...form, title: e.target.value })}
-            />
-            <input
-              placeholder="Price (₦) *"
-              type="number"
-              value={form.price}
-              className="w-full p-2 bg-black/30 rounded text-white placeholder-gray-500 outline-none"
-              onChange={(e) => setForm({ ...form, price: e.target.value })}
-            />
-            <textarea
-              placeholder="Description (optional)"
-              value={form.description}
-              rows={2}
-              className="w-full p-2 bg-black/30 rounded text-white placeholder-gray-500 outline-none"
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-            />
-            <div>
-              <label className="text-xs text-gray-400 block mb-1">Product Image</label>
-              <input
-                type="file"
-                accept="image/*"
-                className="text-gray-400 text-sm"
-                onChange={(e) => setForm({ ...form, file: e.target.files[0] })}
-              />
-            </div>
-            <p className="text-xs text-gray-500">Category: {resolveCategory(service)}</p>
-            <div className="flex gap-2">
-              <button
-                onClick={uploadProduct}
-                disabled={uploading}
-                className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 px-3 py-2 rounded text-sm font-semibold transition"
-              >
-                {uploading ? "Uploading..." : "Upload Product"}
-              </button>
-              <button
-                onClick={() => setShowUpload(false)}
-                className="px-3 py-2 bg-white/10 rounded text-sm"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
+       {showUpload && (
+  <div className="space-y-2 mb-4 bg-black/20 p-3 rounded-xl">
+    <input
+      placeholder="Title *"
+      value={form.title}
+      className="w-full p-2 bg-black/30 rounded text-white placeholder-gray-500 outline-none"
+      onChange={(e) => setForm({ ...form, title: e.target.value })}
+    />
+    <input
+      placeholder="Price ₦ (optional)"
+      type="number"
+      value={form.price}
+      className="w-full p-2 bg-black/30 rounded text-white placeholder-gray-500 outline-none"
+      onChange={(e) => setForm({ ...form, price: e.target.value })}
+    />
+    <textarea
+      placeholder="Description (optional)"
+      value={form.description}
+      rows={2}
+      className="w-full p-2 bg-black/30 rounded text-white placeholder-gray-500 outline-none"
+      onChange={(e) => setForm({ ...form, description: e.target.value })}
+    />
+
+    {/* Image upload — styled properly */}
+    <div>
+      <label className="text-xs text-gray-400 block mb-1">Product Image (optional)</label>
+      <label className="flex items-center gap-2 cursor-pointer bg-black/30 p-2 rounded border border-white/10 hover:border-green-500/50 transition">
+        <span className="text-green-400 text-sm">📷</span>
+        <span className="text-sm text-gray-300 truncate">
+          {form.file ? form.file.name : "Tap to choose image"}
+        </span>
+        <input
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => setForm({ ...form, file: e.target.files[0] })}
+        />
+      </label>
+      {form.file && (
+        <div className="mt-2 flex items-center gap-2">
+          <img
+            src={URL.createObjectURL(form.file)}
+            alt="preview"
+            className="w-16 h-16 object-cover rounded-lg"
+          />
+          <button
+            onClick={() => setForm({ ...form, file: null })}
+            className="text-red-400 text-xs"
+          >
+            Remove
+          </button>
+        </div>
+      )}
+    </div>
+
+    <p className="text-xs text-gray-500">Category: {resolveCategory(service)}</p>
+    <div className="flex gap-2">
+      <button
+        onClick={uploadProduct}
+        disabled={uploading || !form.title}
+        className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 px-3 py-2 rounded text-sm font-semibold transition"
+      >
+        {uploading ? "Uploading..." : "Upload Product"}
+      </button>
+      <button
+        onClick={() => {
+          setShowUpload(false);
+          setForm({ title: "", description: "", price: "", file: null });
+        }}
+        className="px-3 py-2 bg-white/10 rounded text-sm"
+      >
+        Cancel
+      </button>
+    </div>
+  </div>
+)}
 
         {products.length === 0 ? (
           <p className="text-gray-500 text-sm">No products yet.</p>

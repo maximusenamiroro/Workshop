@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route, Navigate, lazy, Suspense } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { lazy, Suspense } from "react";
 import { useAuth } from "../context/AuthContext";
 import MainLayout from "../layouts/MainLayout";
 

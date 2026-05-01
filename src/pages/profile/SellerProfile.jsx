@@ -36,6 +36,8 @@ export default function SellerProfile() {
   const [ratingSubmitting, setRatingSubmitting] = useState(false);
   const [hoverRating, setHoverRating] = useState(0);
   const { showToast, ToastUI } = useToast();
+  const [viewingReel, setViewingReel] = useState(null);
+const reelVideoRef = useRef(null);
 
   const [profile, setProfile] = useState({
     full_name: "", country: "", avatar_url: "", bio: "",
@@ -207,26 +209,54 @@ export default function SellerProfile() {
     }
   };
 
-  const changeProfileImage = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    try {
-      setProfileImage(URL.createObjectURL(file));
-      const fileExt = file.name.split(".").pop();
-      const fileName = `${user.id}/avatar.${fileExt}`;
-      const { error: uploadError } = await supabase.storage
-        .from("avatars")
-        .upload(fileName, file, { upsert: true });
-      if (uploadError) throw uploadError;
+const changeProfileImage = async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
 
-      const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(fileName);
-      await supabase.from("profiles").update({ avatar_url: urlData.publicUrl }).eq("id", user.id);
-      setProfileImage(urlData.publicUrl);
-      showToast("✅ Profile picture updated!");
-    } catch (err) {
-     showToast("Failed to upload: " + err.message);
-    }
-  };
+  // Validate
+  if (!file.type.startsWith("image/")) {
+    showToast("Please select an image file", "error");
+    return;
+  }
+  const sizeMB = file.size / (1024 * 1024);
+  if (sizeMB > 5) {
+    showToast(`Image is ${sizeMB.toFixed(1)}MB — please use an image under 5MB`, "error");
+    return;
+  }
+
+  // Show preview immediately
+  const previewUrl = URL.createObjectURL(file);
+  setProfileImage(previewUrl);
+  showToast("Uploading...", "warning");
+
+  try {
+    const fileExt = file.name.split(".").pop().toLowerCase();
+    const fileName = `${user.id}/avatar.${fileExt}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("avatars")
+      .upload(fileName, file, {
+        upsert: true,
+        contentType: file.type,
+        cacheControl: "3600",
+      });
+
+    if (uploadError) throw uploadError;
+
+    const { data: urlData } = supabase.storage
+      .from("avatars")
+      .getPublicUrl(fileName);
+
+    // Add cache buster so it shows the new image immediately
+    const freshUrl = `${urlData.publicUrl}?t=${Date.now()}`;
+    await supabase.from("profiles").update({ avatar_url: urlData.publicUrl }).eq("id", user.id);
+    setProfileImage(freshUrl);
+    showToast("Profile picture updated!");
+  } catch (err) {
+    setProfileImage(profile.avatar_url || null); // revert on fail
+    showToast("Failed to upload: " + err.message, "error");
+  }
+};
 
   const handleChange = (e) =>
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -662,6 +692,67 @@ export default function SellerProfile() {
           </div>
         </div>
       )}
+      {/* REEL VIEWER — for viewing own reels fullscreen */}
+{viewingReel && (
+  <div className="fixed inset-0 bg-black z-[70] flex flex-col">
+    <div className="flex items-center justify-between p-4 pt-10">
+      <div className="flex items-center gap-2">
+        <div className="w-8 h-8 rounded-full overflow-hidden border border-green-500">
+          {(profileImage || profile.avatar_url) ? (
+            <img src={profileImage || profile.avatar_url} alt="" className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full bg-zinc-700 flex items-center justify-center text-xs font-bold">
+              {profile.full_name?.[0] || "W"}
+            </div>
+          )}
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-white">@{profile.full_name}</p>
+          {viewingReel.description && (
+            <p className="text-xs text-gray-400 line-clamp-1">{viewingReel.description}</p>
+          )}
+        </div>
+      </div>
+      <button
+        onClick={() => {
+          setViewingReel(null);
+          if (reelVideoRef.current) reelVideoRef.current.pause();
+        }}
+        className="p-2 text-white/70 active:scale-90"
+      >
+        ✕
+      </button>
+    </div>
+
+    <div className="flex-1 relative bg-black">
+      <video
+        ref={reelVideoRef}
+        src={viewingReel.video_url}
+        autoPlay
+        loop
+        playsInline
+        controls
+        className="w-full h-full object-contain"
+      />
+      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4 pb-8">
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-gray-400">❤️ {viewingReel.likes || 0} likes</span>
+          {isOwnProfile && (
+            <button
+              onClick={() => {
+                setViewingReel(null);
+                deleteReel(viewingReel.id, viewingReel.video_url);
+              }}
+              className="ml-auto text-red-400 text-xs bg-red-400/10 px-3 py-1 rounded-full"
+            >
+              🗑 Delete Reel
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  </div>
+)}
     </div>
   );
 }
