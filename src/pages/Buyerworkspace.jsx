@@ -69,6 +69,25 @@ export default function BuyerWorkspace() {
     fetchAll();
   }, [user]);
 
+  useEffect(() => {
+  if (!user) return;
+  fetchAll();
+
+  // Real-time new arrivals — refresh when new products posted
+  const productsChannel = supabase
+    .channel("workspace_products")
+    .on("postgres_changes", {
+      event: "INSERT",
+      schema: "public",
+      table: "products",
+    }, () => {
+      fetchActiveSubCategories();
+    })
+    .subscribe();
+
+  return () => supabase.removeChannel(productsChannel);
+}, [user]);
+
   const fetchAll = async () => {
     await fetchActiveSubCategories();
     setLoading(false);
@@ -165,12 +184,7 @@ export default function BuyerWorkspace() {
               48h only
             </span>
           </h2>
-          <button
-            onClick={() => navigate("/new-arrivals")}
-            className="text-xs text-green-400"
-          >
-            See All →
-          </button>
+         
         </div>
 
         {activeSubCategories.length === 0 ? (
