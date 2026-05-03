@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from "react";
-import { FaBell, FaSearch, FaClipboardList } from "react-icons/fa";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { FaSearch, FaClipboardList } from "react-icons/fa";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
@@ -38,8 +38,6 @@ const BUSINESS_CATEGORIES = {
   "Other Business": ["Other"],
 };
 
-const ALL_SUBCATEGORIES = Object.values(BUSINESS_CATEGORIES).flat();
-
 const SUBCATEGORY_EMOJI = {
   "Carpenter": "🪚", "Plumber": "🔧", "Electrician": "⚡", "Mechanic": "🔩",
   "Welder": "🔥", "Tailor": "🧵", "Painter": "🎨", "Barber": "💈",
@@ -53,84 +51,105 @@ const SUBCATEGORY_EMOJI = {
 export default function BuyerWorkspace() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const channelsRef = useRef([]);
 
   const [search, setSearch] = useState("");
   const [activeSubCategories, setActiveSubCategories] = useState([]);
+  const [liveWorkerCount, setLiveWorkerCount] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [now, setNow] = useState(Date.now());
-
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 60000);
-    return () => clearInterval(timer);
-  }, []);
 
   useEffect(() => {
     if (!user) return;
     fetchAll();
+    setupRealtime();
+
+    return () => {
+      channelsRef.current.forEach(ch => supabase.removeChannel(ch));
+      channelsRef.current = [];
+    };
   }, [user]);
 
-  useEffect(() => {
-  if (!user) return;
-  fetchAll();
+  const setupRealtime = () => {
+    // ── Products channel — must add ALL .on() BEFORE .subscribe() ──
+    const productsChannel = supabase
+      .channel(`workspace_products_${user.id}`)
+      .on("postgres_changes", {
+        event: "INSERT",
+        schema: "public",
+        table: "products",
+      }, () => {
+        fetchActiveSubCategories();
+      })
+      .subscribe(); // ← subscribe LAST
 
-  // Real-time new arrivals — refresh when new products posted
-  const productsChannel = supabase
-    .channel("workspace_products")
-    .on("postgres_changes", {
-      event: "INSERT",
-      schema: "public",
-      table: "products",
-    }, () => {
-      fetchActiveSubCategories();
-    })
-    .subscribe();
+    // ── Live workers channel ──
+    const liveChannel = supabase
+      .channel(`workspace_live_${user.id}`)
+      .on("postgres_changes", {
+        event: "INSERT",
+        schema: "public",
+        table: "live_workers",
+      }, () => fetchLiveWorkerCount())
+      .on("postgres_changes", {
+        event: "DELETE",
+        schema: "public",
+        table: "live_workers",
+      }, () => fetchLiveWorkerCount())
+      .subscribe(); // ← subscribe LAST
 
-  return () => supabase.removeChannel(productsChannel);
-}, [user]);
+    channelsRef.current = [productsChannel, liveChannel];
+  };
 
   const fetchAll = async () => {
-    await fetchActiveSubCategories();
+    await Promise.all([
+      fetchActiveSubCategories(),
+      fetchLiveWorkerCount(),
+    ]);
     setLoading(false);
   };
 
- const fetchActiveSubCategories = async () => {
-  try {
-    const since = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+  const fetchActiveSubCategories = async () => {
+    try {
+      const since = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+      const { data, error } = await supabase
+        .from("products")
+        .select("id, worker_id, category")
+        .gte("created_at", since);
+      if (error) throw error;
 
-    const { data, error } = await supabase
-      .from("products")
-      .select("id, worker_id, category")
-      .gte("created_at", since);
+      const workerIds = [...new Set((data || []).map(p => p.worker_id).filter(Boolean))];
+      let workerCategoryMap = {};
+      if (workerIds.length > 0) {
+        const { data: workersData } = await supabase
+          .from("workers")
+          .select("id, category")
+          .in("id", workerIds);
+        (workersData || []).forEach(w => {
+          if (w.category) workerCategoryMap[w.id] = w.category;
+        });
+      }
 
-    if (error) throw error;
-
-    const workerIds = [...new Set((data || []).map(p => p.worker_id).filter(Boolean))];
-
-    let workerCategoryMap = {};
-    if (workerIds.length > 0) {
-      const { data: workersData } = await supabase
-        .from("workers")
-        .select("id, category")
-        .in("id", workerIds);
-
-      (workersData || []).forEach(w => {
-        if (w.category) workerCategoryMap[w.id] = w.category;
+      const subCatSet = new Set();
+      (data || []).forEach(p => {
+        const cat = workerCategoryMap[p.worker_id] || p.category;
+        if (cat) subCatSet.add(cat);
       });
+      setActiveSubCategories([...subCatSet]);
+    } catch (err) {
+      console.error("fetchActiveSubCategories error:", err.message);
     }
+  };
 
-    // Build subcategory list — use worker's registered category
-    // This ensures clicking the circle filters correctly in NewArrivalsPage
-    const subCatSet = new Set();
-    (data || []).forEach(p => {
-      const cat = workerCategoryMap[p.worker_id] || p.category;
-      if (cat) subCatSet.add(cat);
-    });
-
-    setActiveSubCategories([...subCatSet]);
-  } catch (err) {
-    console.error("fetchActiveSubCategories error:", err.message);
-  }
-};
+  const fetchLiveWorkerCount = async () => {
+    try {
+      const { count } = await supabase
+        .from("live_workers")
+        .select("id", { count: "exact", head: true });
+      setLiveWorkerCount(count || 0);
+    } catch (err) {
+      console.error("fetchLiveWorkerCount error:", err.message);
+    }
+  };
 
   const filteredCategories = useMemo(() =>
     Object.keys(BUSINESS_CATEGORIES).filter(c =>
@@ -156,12 +175,12 @@ export default function BuyerWorkspace() {
           <span className="text-[10px] text-gray-400 mt-1">Orders</span>
         </div>
         <h1 className="text-xl font-semibold">Workspace</h1>
-        <div
-          className="flex flex-col items-center cursor-pointer active:opacity-70"
-          onClick={() => navigate("/notifications")}
-        >
-          <FaBell className="text-white/70 text-2xl" />
-          <span className="text-[10px] text-gray-400 mt-1">Alerts</span>
+        <div className="flex flex-col items-center">
+          <div className="flex items-center gap-1">
+            <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+            <span className="text-xs text-green-400 font-medium">{liveWorkerCount} live</span>
+          </div>
+          <span className="text-[10px] text-gray-400 mt-0.5">Workers</span>
         </div>
       </div>
 
@@ -180,11 +199,13 @@ export default function BuyerWorkspace() {
         <div className="flex justify-between items-center mb-3">
           <h2 className="font-semibold flex items-center gap-2">
             🆕 New Arrivals
-            <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full">
-              48h only
-            </span>
+            <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full">48h only</span>
           </h2>
-         
+          {activeSubCategories.length > 0 && (
+            <button onClick={() => navigate("/new-arrivals")} className="text-xs text-green-400">
+              See All →
+            </button>
+          )}
         </div>
 
         {activeSubCategories.length === 0 ? (
@@ -197,18 +218,14 @@ export default function BuyerWorkspace() {
               <button
                 key={cat}
                 onClick={() => navigate(`/new-arrivals?category=${encodeURIComponent(cat)}`)}
-                className="flex flex-col items-center min-w-[72px] cursor-pointer"
+                className="flex flex-col items-center min-w-[72px] cursor-pointer active:scale-95 transition-transform"
               >
                 <div className="w-16 h-16 rounded-full p-[3px] bg-gradient-to-tr from-green-400 to-green-600">
                   <div className="w-full h-full rounded-full bg-[#1a1a1a] border-2 border-[#0f0f0f] flex items-center justify-center">
-                    <span className="text-2xl">
-                      {SUBCATEGORY_EMOJI[cat] || "📦"}
-                    </span>
+                    <span className="text-2xl">{SUBCATEGORY_EMOJI[cat] || "📦"}</span>
                   </div>
                 </div>
-                <p className="text-[10px] text-white mt-1.5 truncate w-16 text-center font-medium">
-                  {cat}
-                </p>
+                <p className="text-[10px] text-white mt-1.5 truncate w-16 text-center font-medium">{cat}</p>
               </button>
             ))}
           </div>
@@ -217,17 +234,18 @@ export default function BuyerWorkspace() {
 
       {/* LIVE BUSINESS */}
       <div className="mb-8">
-        <h2 className="mb-3 font-semibold">Live Business</h2>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="flex items-center gap-2 mb-3">
+          <h2 className="font-semibold">Live Business</h2>
+          <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+        </div>
+        <div className="grid grid-cols-3 gap-3">
           {filteredCategories.map((mainCat) => (
             <button
               key={mainCat}
               onClick={() => navigate(`/subcategories?main=${encodeURIComponent(mainCat)}`)}
               className="bg-[#1a1a1a] p-4 rounded-xl flex flex-col items-center hover:bg-[#242424] transition active:scale-95"
             >
-              <div className="text-2xl mb-2">
-                {MAIN_CATEGORY_ICON[mainCat] || "📦"}
-              </div>
+              <div className="text-2xl mb-2">{MAIN_CATEGORY_ICON[mainCat] || "📦"}</div>
               <p className="text-xs text-center leading-tight">{mainCat}</p>
             </button>
           ))}
@@ -239,7 +257,7 @@ export default function BuyerWorkspace() {
         <h2 className="mb-3 font-semibold">General Workers</h2>
         <button
           onClick={() => navigate("/hire-worker?type=general")}
-          className="w-full bg-[#1a1a1a] p-4 rounded-xl text-center hover:bg-[#242424] transition"
+          className="w-full bg-[#1a1a1a] p-4 rounded-xl text-center hover:bg-[#242424] transition active:scale-95"
         >
           View All General Workers
         </button>
