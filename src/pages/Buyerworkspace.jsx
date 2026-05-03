@@ -201,11 +201,6 @@ export default function BuyerWorkspace() {
             🆕 New Arrivals
             <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full">48h only</span>
           </h2>
-          {activeSubCategories.length > 0 && (
-            <button onClick={() => navigate("/new-arrivals")} className="text-xs text-green-400">
-              See All →
-            </button>
-          )}
         </div>
 
         {activeSubCategories.length === 0 ? (
