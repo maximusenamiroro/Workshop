@@ -306,7 +306,7 @@ export default function NewArrivalsPage() {
               )}
 
               {/* Product info */}
-              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black via-black/80 to-transparent p-5 pb-8 z-10">
+              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black via-black/80 to-transparent p-5 pb-18 z-10">
                 <p className="font-semibold text-base text-white leading-tight line-clamp-1">
                   {storyProducts[storyIndex]?.title}
                 </p>
