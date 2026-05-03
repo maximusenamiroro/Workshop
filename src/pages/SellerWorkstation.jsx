@@ -35,6 +35,7 @@ export default function SellerWorkstation() {
   const navigate = useNavigate();
   const geoWatchRef = useRef(null);
   const channelsRef = useRef([]);
+  const workerProductIdsRef = useRef([]); // cache product IDs for realtime filter
   const { showToast, ToastUI } = useToast();
 
   const [products, setProducts] = useState([]);
@@ -64,12 +65,22 @@ export default function SellerWorkstation() {
 
   useEffect(() => {
     if (!user) return;
-    fetchAll();
-    setupRealtime();
+
+    const init = async () => {
+      await fetchAll();
+      // Setup realtime AFTER fetchAll so workerProductIdsRef is populated
+      setupRealtime();
+    };
+
+    init();
   }, [user]);
 
   const setupRealtime = () => {
-    // ── Bookings channel — ALL .on() before .subscribe() ──
+    // Clean up existing channels first
+    channelsRef.current.forEach(ch => supabase.removeChannel(ch));
+    channelsRef.current = [];
+
+    // ── Bookings channel ──
     const bookingsChannel = supabase
       .channel(`workstation_bookings_${user.id}`)
       .on("postgres_changes", {
@@ -78,7 +89,11 @@ export default function SellerWorkstation() {
         table: "hire_requests",
         filter: `worker_id=eq.${user.id}`,
       }, (payload) => {
-        setBookings(prev => [payload.new, ...prev]);
+        setBookings(prev => {
+          // avoid duplicates
+          if (prev.find(b => b.id === payload.new.id)) return prev;
+          return [payload.new, ...prev];
+        });
         showToast("📋 New hire request received!", "success");
       })
       .on("postgres_changes", {
@@ -91,9 +106,15 @@ export default function SellerWorkstation() {
           prev.map(b => b.id === payload.new.id ? { ...b, ...payload.new } : b)
         );
       })
-      .subscribe(); // ← subscribe LAST
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          console.log("Bookings channel subscribed");
+        }
+      });
 
-    // ── Orders channel — ALL .on() before .subscribe() ──
+    // ── Orders channel ──
+    // We watch ALL order inserts and filter by our product IDs in JS
+    // This is more reliable than complex Supabase filters
     const ordersChannel = supabase
       .channel(`workstation_orders_${user.id}`)
       .on("postgres_changes", {
@@ -102,17 +123,13 @@ export default function SellerWorkstation() {
         table: "orders",
       }, async (payload) => {
         const newOrder = payload.new;
-        if (!newOrder.product_id) return;
+        if (!newOrder?.product_id) return;
 
-        const { data: product } = await supabase
-          .from("products")
-          .select("id, title, image_url")
-          .eq("id", newOrder.product_id)
-          .eq("worker_id", user.id)
-          .maybeSingle();
+        // Check if this order is for one of this worker's products
+        const isMyProduct = workerProductIdsRef.current.includes(newOrder.product_id);
+        if (!isMyProduct) return;
 
-        if (!product) return;
-
+        // Fetch buyer name
         const { data: buyer } = await supabase
           .from("profiles")
           .select("full_name")
@@ -122,10 +139,13 @@ export default function SellerWorkstation() {
         const enrichedOrder = {
           ...newOrder,
           buyer_name: buyer?.full_name || "Customer",
-          product_image_url: newOrder.product_image_url || product.image_url,
         };
 
-        setProductOrders(prev => [enrichedOrder, ...prev]);
+        setProductOrders(prev => {
+          if (prev.find(o => o.id === newOrder.id)) return prev;
+          return [enrichedOrder, ...prev];
+        });
+
         setNewOrderIds(prev => new Set([...prev, newOrder.id]));
         showToast(`🛍️ New order from ${buyer?.full_name || "a customer"}!`);
 
@@ -142,11 +162,20 @@ export default function SellerWorkstation() {
         schema: "public",
         table: "orders",
       }, (payload) => {
+        const updated = payload.new;
+        if (!updated?.product_id) return;
+        const isMyProduct = workerProductIdsRef.current.includes(updated.product_id);
+        if (!isMyProduct) return;
+
         setProductOrders(prev =>
-          prev.map(o => o.id === payload.new.id ? { ...o, status: payload.new.status } : o)
+          prev.map(o => o.id === updated.id ? { ...o, ...updated } : o)
         );
       })
-      .subscribe(); // ← subscribe LAST
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          console.log("Orders channel subscribed");
+        }
+      });
 
     channelsRef.current = [bookingsChannel, ordersChannel];
   };
@@ -202,7 +231,10 @@ export default function SellerWorkstation() {
       const finalService = resolveCategory(service);
 
       if (isLive) {
-        if (geoWatchRef.current) { navigator.geolocation.clearWatch(geoWatchRef.current); geoWatchRef.current = null; }
+        if (geoWatchRef.current) {
+          navigator.geolocation.clearWatch(geoWatchRef.current);
+          geoWatchRef.current = null;
+        }
         await supabase.from("live_workers").delete().eq("worker_id", user.id);
         setIsLive(false);
         setLiveLoading(false);
@@ -224,7 +256,7 @@ export default function SellerWorkstation() {
             setLiveLoading(false);
             return;
           }
-        } catch (e) { console.warn("Permissions API not supported"); }
+        } catch (e) { /* permissions API not supported, continue */ }
       }
 
       showToast("Getting your location...", "warning");
@@ -288,7 +320,11 @@ export default function SellerWorkstation() {
         .eq("worker_id", user.id)
         .order("created_at", { ascending: false });
       setProducts(data || []);
-      if (data?.length > 0) await fetchProductViews(data.map(p => p.id));
+      if (data?.length > 0) {
+        // Cache product IDs for realtime filtering
+        workerProductIdsRef.current = data.map(p => p.id);
+        await fetchProductViews(data.map(p => p.id));
+      }
     } catch (err) {
       console.error("fetchProducts failed:", err.message);
     }
@@ -302,7 +338,9 @@ export default function SellerWorkstation() {
         .in("product_id", productIds);
       if (error) throw error;
       const viewCounts = {};
-      (data || []).forEach(v => { viewCounts[v.product_id] = (viewCounts[v.product_id] || 0) + 1; });
+      (data || []).forEach(v => {
+        viewCounts[v.product_id] = (viewCounts[v.product_id] || 0) + 1;
+      });
       setProductViews(viewCounts);
     } catch (err) {
       console.error("fetchProductViews failed:", err.message);
@@ -312,39 +350,84 @@ export default function SellerWorkstation() {
   const fetchProductOrders = async () => {
     if (!user) return;
     try {
-      const { data: workerProducts } = await supabase
-        .from("products").select("id").eq("worker_id", user.id);
-      if (!workerProducts?.length) { setProductOrders([]); return; }
+      // Step 1 — get this worker's product IDs
+      const { data: workerProducts, error: productsError } = await supabase
+        .from("products")
+        .select("id")
+        .eq("worker_id", user.id);
+
+      if (productsError) {
+        console.error("fetchProductOrders — products error:", productsError.message);
+        return;
+      }
+
+      if (!workerProducts || workerProducts.length === 0) {
+        setProductOrders([]);
+        return;
+      }
 
       const productIds = workerProducts.map(p => p.id);
-      const { data: ordersData, error } = await supabase
+      workerProductIdsRef.current = productIds; // keep ref updated
+
+      // Step 2 — fetch orders for those products
+      const { data: ordersData, error: ordersError } = await supabase
         .from("orders")
         .select("id, product_name, product_image_url, status, created_at, user_id, quantity, total_amount, product_id")
         .in("product_id", productIds)
         .order("created_at", { ascending: false });
-      if (error) throw error;
 
-      const buyerIds = [...new Set((ordersData || []).map(o => o.user_id).filter(Boolean))];
+      if (ordersError) {
+        console.error("fetchProductOrders — orders error:", ordersError.message);
+        return;
+      }
+
+      if (!ordersData || ordersData.length === 0) {
+        setProductOrders([]);
+        return;
+      }
+
+      // Step 3 — fetch buyer profiles
+      const buyerIds = [...new Set(ordersData.map(o => o.user_id).filter(Boolean))];
       let buyerMap = {};
       if (buyerIds.length > 0) {
         const { data: buyersData } = await supabase
-          .from("profiles").select("id, full_name").in("id", buyerIds);
+          .from("profiles")
+          .select("id, full_name")
+          .in("id", buyerIds);
         (buyersData || []).forEach(b => { buyerMap[b.id] = b.full_name; });
       }
 
-      setProductOrders((ordersData || []).map(o => ({
-        ...o, buyer_name: buyerMap[o.user_id] || "Customer",
-      })));
+      const merged = ordersData.map(o => ({
+        ...o,
+        buyer_name: buyerMap[o.user_id] || "Customer",
+      }));
+
+      console.log(`Fetched ${merged.length} orders for worker ${user.id}`);
+      setProductOrders(merged);
     } catch (err) {
       console.error("fetchProductOrders failed:", err.message);
     }
   };
 
   const updateOrderStatus = async (orderId, status) => {
-    setProductOrders(prev => prev.map(o => o.id === orderId ? { ...o, status } : o));
-    const { error } = await supabase.from("orders").update({ status }).eq("id", orderId);
-    if (error) { showToast("Failed to update: " + error.message, "error"); fetchProductOrders(); }
-    else showToast(`Order marked as "${status}"`);
+    // Optimistic update first
+    setProductOrders(prev =>
+      prev.map(o => o.id === orderId ? { ...o, status } : o)
+    );
+
+    const { error } = await supabase
+      .from("orders")
+      .update({ status })
+      .eq("id", orderId);
+
+    if (error) {
+      console.error("updateOrderStatus error:", error.message);
+      showToast("Failed to update: " + error.message, "error");
+      // Revert
+      fetchProductOrders();
+    } else {
+      showToast(`Order marked as "${status}"`);
+    }
   };
 
   const uploadProduct = async () => {
@@ -367,15 +450,21 @@ export default function SellerWorkstation() {
         imageUrl = urlData.publicUrl;
       }
       const finalCategory = resolveCategory(service);
-      const { error } = await supabase.from("products").insert({
+      const { data: newProduct, error } = await supabase.from("products").insert({
         worker_id: user.id,
         title: form.title,
         description: form.description || "",
         price: form.price ? parseFloat(form.price) : null,
         category: finalCategory,
         image_url: imageUrl,
-      });
+      }).select().single();
       if (error) throw new Error("Failed to save product: " + error.message);
+
+      // Update the product IDs ref immediately
+      if (newProduct) {
+        workerProductIdsRef.current = [...workerProductIdsRef.current, newProduct.id];
+      }
+
       setForm({ title: "", description: "", price: "", file: null });
       setShowUpload(false);
       fetchProducts();
@@ -395,6 +484,7 @@ export default function SellerWorkstation() {
         await supabase.storage.from("products").remove([fileName]);
       }
       setProducts(prev => prev.filter(p => p.id !== product.id));
+      workerProductIdsRef.current = workerProductIdsRef.current.filter(id => id !== product.id);
       showToast("Product deleted");
     } catch (err) {
       showToast("Failed to delete product", "error");
@@ -419,8 +509,12 @@ export default function SellerWorkstation() {
   const updateBookingStatus = async (id, status) => {
     setBookings(prev => prev.map(b => b.id === id ? { ...b, status } : b));
     const { error } = await supabase.from("hire_requests").update({ status }).eq("id", id);
-    if (error) { showToast("Failed to update: " + error.message, "error"); fetchBookings(); }
-    else showToast(`Booking ${status}`);
+    if (error) {
+      showToast("Failed to update: " + error.message, "error");
+      fetchBookings();
+    } else {
+      showToast(`Booking ${status}`);
+    }
   };
 
   if (loading) return (
@@ -429,7 +523,7 @@ export default function SellerWorkstation() {
     </div>
   );
 
-  const pendingOrdersCount = productOrders.filter(o => o.status === "pending").length;
+  const pendingOrdersCount = productOrders.filter(o => !o.status || o.status === "pending").length;
   const pendingBookingsCount = bookings.filter(b => !b.status || b.status === "pending").length;
 
   return (
@@ -468,7 +562,7 @@ export default function SellerWorkstation() {
         {isLive && (
           <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-2 mb-3 text-xs text-green-400 flex items-center gap-2">
             <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-            GPS is active — your location is being shared with clients
+            GPS active — your location is shared with clients
           </div>
         )}
         <select
@@ -516,21 +610,31 @@ export default function SellerWorkstation() {
               </span>
             )}
           </h2>
-          <span className="text-xs text-gray-500">{productOrders.length} total</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500">{productOrders.length} total</span>
+            <button
+              onClick={fetchProductOrders}
+              className="text-xs text-green-400 bg-green-500/10 px-2 py-0.5 rounded-full"
+            >
+              Refresh
+            </button>
+          </div>
         </div>
 
         {productOrders.length === 0 ? (
           <div className="text-center py-6">
             <p className="text-3xl mb-2">📦</p>
             <p className="text-gray-500 text-sm">No product orders yet</p>
-            <p className="text-xs text-gray-600 mt-1">Orders appear here in real-time</p>
+            <p className="text-xs text-gray-600 mt-1">New orders appear here instantly</p>
           </div>
         ) : (
           productOrders.map((o) => (
             <div
               key={o.id}
               className={`py-3 border-b border-white/10 transition-all duration-500 ${
-                newOrderIds.has(o.id) ? "bg-green-500/5 border-l-2 border-l-green-500 pl-2 rounded-r-lg" : ""
+                newOrderIds.has(o.id)
+                  ? "bg-green-500/5 border-l-2 border-l-green-500 pl-2 rounded-r-lg"
+                  : ""
               }`}
             >
               {newOrderIds.has(o.id) && (
@@ -543,9 +647,10 @@ export default function SellerWorkstation() {
               <div className="flex justify-between items-start mb-2">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-lg overflow-hidden bg-white/10 flex items-center justify-center flex-shrink-0">
-                    {o.product_image_url ? (
-                      <img src={o.product_image_url} className="w-full h-full object-cover" alt={o.product_name} />
-                    ) : <span>📦</span>}
+                    {o.product_image_url
+                      ? <img src={o.product_image_url} className="w-full h-full object-cover" alt={o.product_name} />
+                      : <span>📦</span>
+                    }
                   </div>
                   <div>
                     <p className="text-sm font-medium">{o.product_name}</p>
@@ -564,11 +669,12 @@ export default function SellerWorkstation() {
                     )}
                   </div>
                 </div>
-                <span className={`text-xs px-2 py-1 rounded-full ${ORDER_STATUS_COLOR[o.status] || ORDER_STATUS_COLOR.pending}`}>
+                <span className={`text-xs px-2 py-1 rounded-full whitespace-nowrap ${ORDER_STATUS_COLOR[o.status] || ORDER_STATUS_COLOR.pending}`}>
                   {o.status || "pending"}
                 </span>
               </div>
 
+              {/* Status update buttons */}
               <div className="mb-2">
                 <p className="text-[10px] text-gray-500 mb-1.5">Update Status:</p>
                 <div className="flex gap-1.5 flex-wrap">
@@ -578,11 +684,14 @@ export default function SellerWorkstation() {
                       onClick={() => updateOrderStatus(o.id, s)}
                       className={`text-xs px-2.5 py-1 rounded-lg transition-all active:scale-95 ${
                         o.status === s
-                          ? "bg-green-600 text-white font-semibold"
+                          ? "bg-green-600 text-white font-semibold shadow-sm"
                           : "bg-white/10 hover:bg-white/20 text-gray-300"
                       }`}
                     >
-                      {s === "shipping" ? "📦 " : s === "on the way" ? "🚚 " : s === "arriving" ? "📍 " : "✅ "}
+                      {s === "shipping" && "📦 "}
+                      {s === "on the way" && "🚚 "}
+                      {s === "arriving" && "📍 "}
+                      {s === "delivered" && "✅ "}
                       {s}
                     </button>
                   ))}
@@ -650,12 +759,17 @@ export default function SellerWorkstation() {
             </div>
             <p className="text-xs text-gray-500">Category: {resolveCategory(service)}</p>
             <div className="flex gap-2">
-              <button onClick={uploadProduct} disabled={uploading || !form.title}
-                className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 px-3 py-2 rounded text-sm font-semibold transition">
+              <button
+                onClick={uploadProduct}
+                disabled={uploading || !form.title}
+                className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 px-3 py-2 rounded text-sm font-semibold transition"
+              >
                 {uploading ? "Uploading..." : "Upload Product"}
               </button>
-              <button onClick={() => { setShowUpload(false); setForm({ title: "", description: "", price: "", file: null }); }}
-                className="px-3 py-2 bg-white/10 rounded text-sm">
+              <button
+                onClick={() => { setShowUpload(false); setForm({ title: "", description: "", price: "", file: null }); }}
+                className="px-3 py-2 bg-white/10 rounded text-sm"
+              >
                 Cancel
               </button>
             </div>
@@ -669,7 +783,10 @@ export default function SellerWorkstation() {
             <div key={p.id} className="flex justify-between items-center py-3 border-b border-white/10">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-xl overflow-hidden bg-white/10 flex items-center justify-center flex-shrink-0">
-                  {p.image_url ? <img src={p.image_url} alt={p.title} className="w-full h-full object-cover" /> : <span>📦</span>}
+                  {p.image_url
+                    ? <img src={p.image_url} alt={p.title} className="w-full h-full object-cover" />
+                    : <span>📦</span>
+                  }
                 </div>
                 <div>
                   <p className="text-sm font-medium">{p.title}</p>
@@ -722,19 +839,25 @@ export default function SellerWorkstation() {
               </div>
               {(!b.status || b.status === "pending") && (
                 <div className="flex gap-2 mt-2">
-                  <button onClick={() => updateBookingStatus(b.id, "accepted")}
-                    className="flex-1 bg-green-600 hover:bg-green-700 py-1.5 rounded-lg text-xs font-semibold transition active:scale-95">
+                  <button
+                    onClick={() => updateBookingStatus(b.id, "accepted")}
+                    className="flex-1 bg-green-600 hover:bg-green-700 py-1.5 rounded-lg text-xs font-semibold transition active:scale-95"
+                  >
                     ✅ Accept
                   </button>
-                  <button onClick={() => updateBookingStatus(b.id, "rejected")}
-                    className="flex-1 bg-red-600/20 hover:bg-red-600/40 text-red-400 py-1.5 rounded-lg text-xs font-semibold transition active:scale-95">
+                  <button
+                    onClick={() => updateBookingStatus(b.id, "rejected")}
+                    className="flex-1 bg-red-600/20 hover:bg-red-600/40 text-red-400 py-1.5 rounded-lg text-xs font-semibold transition active:scale-95"
+                  >
                     ❌ Reject
                   </button>
                 </div>
               )}
               {b.status === "accepted" && (
-                <button onClick={() => navigate(`/inbox?user=${b.client_id}`)}
-                  className="w-full mt-2 bg-white/10 hover:bg-white/20 py-1.5 rounded-lg text-xs transition">
+                <button
+                  onClick={() => navigate(`/inbox?user=${b.client_id}`)}
+                  className="w-full mt-2 bg-white/10 hover:bg-white/20 py-1.5 rounded-lg text-xs transition"
+                >
                   💬 Message Client
                 </button>
               )}
