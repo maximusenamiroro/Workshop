@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Suspense } from "react";
+import React, { useState, useEffect, useRef, Suspense } from "react";
 import { supabase } from "../../lib/supabaseClient";
 
 const LazyReelCard = React.lazy(() => import("./ReelCard"));
@@ -6,29 +6,94 @@ const LazyReelCard = React.lazy(() => import("./ReelCard"));
 export default function ReelsPage() {
   const [reels, setReels] = useState([]);
   const [loading, setLoading] = useState(true);
+  const channelRef = useRef(null);
 
   useEffect(() => {
     fetchReels();
-    const channel = supabase
-      .channel("reels_changes")
-      .on("postgres_changes", { event: "*", schema: "public", table: "reels" }, fetchReels)
-      .subscribe();
-    return () => supabase.removeChannel(channel);
+    setupRealtime();
+
+    return () => {
+      if (channelRef.current) supabase.removeChannel(channelRef.current);
+    };
   }, []);
 
   const fetchReels = async () => {
     try {
       const { data, error } = await supabase
         .from("reels")
-        .select(`id, video_url, description, type, likes, created_at, user_id, profiles(full_name, avatar_url)`)
+        .select(`
+          id, video_url, description, type, created_at, user_id,
+          profiles(full_name, avatar_url),
+          reel_likes(id)
+        `)
         .order("created_at", { ascending: false });
+
       if (error) throw error;
-      setReels(data || []);
+
+      // Compute like count from reel_likes array — accurate and always fresh
+      const reelsWithCounts = (data || []).map(r => ({
+        ...r,
+        likes: r.reel_likes?.length || 0,
+      }));
+
+      setReels(reelsWithCounts);
     } catch (err) {
       console.error("Failed to fetch reels:", err.message);
     } finally {
       setLoading(false);
     }
+  };
+
+  const setupRealtime = () => {
+    // Watch reel_likes inserts/deletes to update counts without refetching everything
+    channelRef.current = supabase
+      .channel("reels_likes_realtime")
+      .on("postgres_changes", {
+        event: "INSERT",
+        schema: "public",
+        table: "reel_likes",
+      }, (payload) => {
+        const { reel_id } = payload.new;
+        setReels(prev =>
+          prev.map(r => r.id === reel_id
+            ? { ...r, likes: r.likes + 1 }
+            : r
+          )
+        );
+      })
+      .on("postgres_changes", {
+        event: "DELETE",
+        schema: "public",
+        table: "reel_likes",
+      }, (payload) => {
+        const { reel_id } = payload.old;
+        setReels(prev =>
+          prev.map(r => r.id === reel_id
+            ? { ...r, likes: Math.max(0, r.likes - 1) }
+            : r
+          )
+        );
+      })
+      .on("postgres_changes", {
+        event: "INSERT",
+        schema: "public",
+        table: "reels",
+      }, () => {
+        // New reel posted — refetch to get it
+        fetchReels();
+      })
+      .subscribe();
+  };
+
+  // Called by ReelCard when it toggles a like locally
+  // We update just that one reel's count in state — no full refetch
+  const handleLikeUpdate = (reelId, delta) => {
+    setReels(prev =>
+      prev.map(r => r.id === reelId
+        ? { ...r, likes: Math.max(0, r.likes + delta) }
+        : r
+      )
+    );
   };
 
   if (loading) return (
@@ -47,15 +112,8 @@ export default function ReelsPage() {
 
   return (
     <div className="h-full w-full bg-black flex">
-
-      {/* Desktop — centered column with side padding */}
       <div
-        className="
-           w-full md:w-[420px] md:mx-auto
-    h-full overflow-y-scroll
-    snap-y snap-mandatory scroll-smooth
-    relative
-        "
+        className="w-full md:w-[420px] md:mx-auto h-full overflow-y-scroll snap-y snap-mandatory scroll-smooth relative"
         style={{ scrollSnapType: "y mandatory", WebkitOverflowScrolling: "touch" }}
       >
         {reels.map((reel) => (
@@ -68,13 +126,14 @@ export default function ReelsPage() {
                 <div className="w-10 h-10 border-4 border-green-500 border-t-transparent rounded-full animate-spin" />
               </div>
             }>
-              <LazyReelCard reel={reel} onReelUpdate={fetchReels} />
+              <LazyReelCard
+                reel={reel}
+                onLikeUpdate={handleLikeUpdate}
+              />
             </Suspense>
           </div>
         ))}
       </div>
-
-      {/* Desktop side fill — dark background */}
       <div className="hidden md:block flex-1 bg-zinc-950" />
     </div>
   );
