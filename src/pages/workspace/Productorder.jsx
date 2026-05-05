@@ -2,25 +2,36 @@ import { useEffect, useState, useRef } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { useAuth } from "../../context/AuthContext";
 import { useNavigate } from "react-router-dom";
+import { useToast } from "../../hooks/useToast";
 
 const STATUS_STEPS = ["pending", "shipping", "on the way", "arriving", "delivered"];
 
 const STATUS_CONFIG = {
-  pending:    { color: "text-yellow-400", bg: "bg-yellow-500/20", emoji: "⏳" },
-  shipping:   { color: "text-blue-400",   bg: "bg-blue-500/20",   emoji: "📦" },
-  "on the way": { color: "text-blue-400", bg: "bg-blue-500/20",   emoji: "🚚" },
-  arriving:   { color: "text-purple-400", bg: "bg-purple-500/20", emoji: "📍" },
-  delivered:  { color: "text-green-400",  bg: "bg-green-500/20",  emoji: "✅" },
+  pending:      { color: "text-yellow-400", bg: "bg-yellow-500/20", emoji: "⏳" },
+  shipping:     { color: "text-blue-400",   bg: "bg-blue-500/20",   emoji: "📦" },
+  "on the way": { color: "text-blue-400",   bg: "bg-blue-500/20",   emoji: "🚚" },
+  arriving:     { color: "text-purple-400", bg: "bg-purple-500/20", emoji: "📍" },
+  delivered:    { color: "text-green-400",  bg: "bg-green-500/20",  emoji: "✅" },
 };
+
+const formatDate = (dateStr) =>
+  new Date(dateStr).toLocaleDateString("en-US", {
+    month: "short", day: "numeric",
+    hour: "2-digit", minute: "2-digit",
+  });
 
 export default function MyOrders() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { showToast, ToastUI } = useToast();
   const channelsRef = useRef([]);
+  const trackingWatchRef = useRef(null);
 
   const [activeTab, setActiveTab] = useState("products");
   const [productOrders, setProductOrders] = useState([]);
   const [bookings, setBookings] = useState([]);
+  const [trackingSessions, setTrackingSessions] = useState({});
+  const [trackingLoading, setTrackingLoading] = useState({});
   const [loading, setLoading] = useState(true);
   const [updatedOrderIds, setUpdatedOrderIds] = useState(new Set());
 
@@ -28,20 +39,19 @@ export default function MyOrders() {
     if (!user) return;
     fetchAll();
     setupRealtime();
-
     return () => {
       channelsRef.current.forEach(ch => supabase.removeChannel(ch));
       channelsRef.current = [];
+      if (trackingWatchRef.current) navigator.geolocation.clearWatch(trackingWatchRef.current);
     };
   }, [user]);
 
   const setupRealtime = () => {
-    // Real-time order status updates — ALL .on() before .subscribe()
+    // Order status updates
     const ordersChannel = supabase
       .channel(`myorders_${user.id}`)
       .on("postgres_changes", {
-        event: "UPDATE",
-        schema: "public",
+        event: "UPDATE", schema: "public",
         table: "orders",
         filter: `user_id=eq.${user.id}`,
       }, (payload) => {
@@ -49,24 +59,18 @@ export default function MyOrders() {
         setProductOrders(prev =>
           prev.map(o => o.id === updated.id ? { ...o, status: updated.status } : o)
         );
-        // Flash highlight on updated order
         setUpdatedOrderIds(prev => new Set([...prev, updated.id]));
         setTimeout(() => {
-          setUpdatedOrderIds(prev => {
-            const next = new Set(prev);
-            next.delete(updated.id);
-            return next;
-          });
+          setUpdatedOrderIds(prev => { const n = new Set(prev); n.delete(updated.id); return n; });
         }, 5000);
       })
-      .subscribe(); // ← subscribe LAST
+      .subscribe();
 
-    // Real-time booking status updates
+    // Booking status updates
     const bookingsChannel = supabase
       .channel(`mybookings_${user.id}`)
       .on("postgres_changes", {
-        event: "UPDATE",
-        schema: "public",
+        event: "UPDATE", schema: "public",
         table: "hire_requests",
         filter: `client_id=eq.${user.id}`,
       }, (payload) => {
@@ -74,9 +78,35 @@ export default function MyOrders() {
           prev.map(b => b.id === payload.new.id ? { ...b, ...payload.new } : b)
         );
       })
-      .subscribe(); // ← subscribe LAST
+      .subscribe();
 
-    channelsRef.current = [ordersChannel, bookingsChannel];
+    // Tracking session updates — worker starts/stops or client stops
+    const trackingChannel = supabase
+      .channel(`myorders_tracking_${user.id}`)
+      .on("postgres_changes", {
+        event: "*", schema: "public",
+        table: "tracking_sessions",
+        filter: `client_id=eq.${user.id}`,
+      }, (payload) => {
+        const updated = payload.new;
+        if (!updated) return;
+        setTrackingSessions(prev => ({
+          ...prev,
+          [updated.booking_id]: updated,
+        }));
+        if (updated.is_active) {
+          showToast("📍 Worker started sharing their location!");
+        } else {
+          // Stop sharing our own GPS too if we were sharing
+          if (trackingWatchRef.current) {
+            navigator.geolocation.clearWatch(trackingWatchRef.current);
+            trackingWatchRef.current = null;
+          }
+        }
+      })
+      .subscribe();
+
+    channelsRef.current = [ordersChannel, bookingsChannel, trackingChannel];
   };
 
   const fetchAll = async () => {
@@ -93,9 +123,7 @@ export default function MyOrders() {
         .order("created_at", { ascending: false });
       if (error) throw error;
       setProductOrders(data || []);
-    } catch (err) {
-      console.error("Error fetching product orders:", err);
-    }
+    } catch (err) { console.error("Error fetching product orders:", err); }
   };
 
   const fetchBookings = async () => {
@@ -107,16 +135,70 @@ export default function MyOrders() {
         .order("created_at", { ascending: false });
       if (error) throw error;
       setBookings(data || []);
+
+      // Fetch tracking sessions for accepted bookings
+      const accepted = (data || []).filter(b => b.status === "accepted");
+      if (accepted.length > 0) {
+        const { data: sessions } = await supabase
+          .from("tracking_sessions")
+          .select("*")
+          .in("booking_id", accepted.map(b => b.id));
+        const sessionMap = {};
+        (sessions || []).forEach(s => { sessionMap[s.booking_id] = s; });
+        setTrackingSessions(sessionMap);
+      }
+    } catch (err) { console.error("Error fetching bookings:", err); }
+  };
+
+  // Client stops tracking — updates session to inactive and stops sharing their GPS
+  const stopTracking = async (bookingId) => {
+    setTrackingLoading(prev => ({ ...prev, [bookingId]: true }));
+    try {
+      await supabase
+        .from("tracking_sessions")
+        .update({ is_active: false, updated_at: new Date().toISOString() })
+        .eq("booking_id", bookingId);
+
+      if (trackingWatchRef.current) {
+        navigator.geolocation.clearWatch(trackingWatchRef.current);
+        trackingWatchRef.current = null;
+      }
+
+      setTrackingSessions(prev => ({
+        ...prev,
+        [bookingId]: { ...prev[bookingId], is_active: false },
+      }));
+      showToast("Tracking stopped");
     } catch (err) {
-      console.error("Error fetching bookings:", err);
+      showToast("Failed to stop tracking", "error");
+    } finally {
+      setTrackingLoading(prev => ({ ...prev, [bookingId]: false }));
     }
   };
 
-  const formatDate = (dateStr) =>
-    new Date(dateStr).toLocaleDateString("en-US", {
-      month: "short", day: "numeric",
-      hour: "2-digit", minute: "2-digit",
-    });
+  // When client opens tracking page, also start sharing their GPS into the session
+  const startSharingClientLocation = async (bookingId) => {
+    if (!navigator.geolocation) return;
+    if (trackingWatchRef.current) return; // already sharing
+
+    const updateClientLocation = async (lat, lng) => {
+      await supabase
+        .from("tracking_sessions")
+        .update({ client_lat: lat, client_lng: lng, updated_at: new Date().toISOString() })
+        .eq("booking_id", bookingId);
+    };
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => updateClientLocation(pos.coords.latitude, pos.coords.longitude),
+      () => {}, { enableHighAccuracy: false, timeout: 10000 }
+    );
+
+    trackingWatchRef.current = navigator.geolocation.watchPosition(
+      (pos) => updateClientLocation(pos.coords.latitude, pos.coords.longitude),
+      () => {},
+      { enableHighAccuracy: false, maximumAge: 5000, timeout: 15000 }
+    );
+  };
 
   if (loading) return (
     <div className="min-h-screen bg-[#0B0F19] flex items-center justify-center text-white">
@@ -126,6 +208,7 @@ export default function MyOrders() {
 
   return (
     <div className="h-full overflow-y-auto bg-[#0B0F19] text-white pb-24">
+      <ToastUI />
 
       {/* HEADER */}
       <div className="flex items-center gap-3 p-4 border-b border-white/10 sticky top-0 bg-[#0B0F19]/95 backdrop-blur z-10">
@@ -169,17 +252,15 @@ export default function MyOrders() {
 
       <div className="px-4 space-y-4">
 
-        {/* PRODUCT ORDERS */}
+        {/* ── PRODUCT ORDERS ── */}
         {activeTab === "products" && (
           <>
             {productOrders.length === 0 ? (
               <div className="text-center py-16 text-gray-400">
                 <p className="text-5xl mb-4">📦</p>
                 <p>No product orders yet</p>
-                <button
-                  onClick={() => navigate("/reels")}
-                  className="mt-4 bg-green-600 px-6 py-3 rounded-2xl text-white text-sm font-semibold"
-                >
+                <button onClick={() => navigate("/reels")}
+                  className="mt-4 bg-green-600 px-6 py-3 rounded-2xl text-white text-sm font-semibold">
                   Browse Products
                 </button>
               </div>
@@ -196,21 +277,18 @@ export default function MyOrders() {
                       isUpdated ? "border-green-500/50 shadow-lg shadow-green-500/10" : "border-white/10"
                     }`}
                   >
-                    {/* Status updated flash */}
                     {isUpdated && (
                       <div className="bg-green-500/10 border-b border-green-500/20 px-4 py-2 flex items-center gap-2">
                         <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
                         <span className="text-xs text-green-400 font-semibold">Status updated by seller!</span>
                       </div>
                     )}
-
                     <div className="p-4">
-                      {/* Product info */}
                       <div className="flex gap-3 mb-4">
                         <div className="w-14 h-14 rounded-xl overflow-hidden bg-zinc-800 flex-shrink-0 flex items-center justify-center">
-                          {order.product_image_url ? (
-                            <img src={order.product_image_url} alt={order.product_name} className="w-full h-full object-cover" />
-                          ) : <span className="text-2xl">📦</span>}
+                          {order.product_image_url
+                            ? <img src={order.product_image_url} alt={order.product_name} className="w-full h-full object-cover" />
+                            : <span className="text-2xl">📦</span>}
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="font-semibold text-sm truncate">{order.product_name}</p>
@@ -218,19 +296,16 @@ export default function MyOrders() {
                             {order.quantity && `Qty: ${order.quantity} • `}
                             {order.total_amount
                               ? `₦${Number(order.total_amount).toLocaleString()}`
-                              : order.price
-                                ? `₦${Number(order.price).toLocaleString()}`
-                                : "Price on request"
-                            }
+                              : order.price ? `₦${Number(order.price).toLocaleString()}` : "Price on request"}
                           </p>
                           <p className="text-xs text-gray-600 mt-0.5">{formatDate(order.created_at)}</p>
                         </div>
-                        <span className={`text-xs px-2.5 py-1 rounded-full font-semibold self-start ${config.bg} ${config.color}`}>
+                        <span className={`text-xs px-2.5 py-1 rounded-full font-semibold self-start whitespace-nowrap ${config.bg} ${config.color}`}>
                           {config.emoji} {order.status || "pending"}
                         </span>
                       </div>
 
-                      {/* Progress tracker */}
+                      {/* Progress bar */}
                       <div className="mb-3">
                         <div className="flex items-center justify-between mb-1">
                           {STATUS_STEPS.map((step, idx) => {
@@ -239,20 +314,14 @@ export default function MyOrders() {
                             return (
                               <div key={step} className="flex flex-col items-center flex-1">
                                 <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-all ${
-                                  isCompleted
-                                    ? "bg-green-500 text-white"
-                                    : "bg-zinc-700 text-gray-500"
+                                  isCompleted ? "bg-green-500 text-white" : "bg-zinc-700 text-gray-500"
                                 } ${isCurrent ? "ring-2 ring-green-400 ring-offset-1 ring-offset-[#101623]" : ""}`}>
                                   {isCompleted ? (isCurrent ? STATUS_CONFIG[step]?.emoji : "✓") : idx + 1}
                                 </div>
-                                {idx < STATUS_STEPS.length - 1 && (
-                                  <div className="hidden" /> // spacer handled by flex
-                                )}
                               </div>
                             );
                           })}
                         </div>
-                        {/* Progress line */}
                         <div className="relative h-1 bg-zinc-700 rounded-full mx-3 -mt-3.5 mb-2">
                           <div
                             className="absolute top-0 left-0 h-full bg-green-500 rounded-full transition-all duration-700"
@@ -261,28 +330,24 @@ export default function MyOrders() {
                         </div>
                         <div className="flex justify-between px-1">
                           {STATUS_STEPS.map((step) => (
-                            <span key={step} className="text-[9px] text-gray-500 capitalize" style={{ width: "20%", textAlign: "center" }}>
+                            <span key={step} className="text-[9px] text-gray-500 capitalize"
+                              style={{ width: "20%", textAlign: "center" }}>
                               {step === "on the way" ? "on way" : step}
                             </span>
                           ))}
                         </div>
                       </div>
 
-                      {/* Actions */}
                       <div className="flex gap-2 mt-3">
                         {order.product_id && (
-                          <button
-                            onClick={() => navigate(`/product/${order.product_id}`)}
-                            className="flex-1 bg-white/10 hover:bg-white/15 py-2 rounded-xl text-xs font-medium transition active:scale-95"
-                          >
+                          <button onClick={() => navigate(`/product/${order.product_id}`)}
+                            className="flex-1 bg-white/10 hover:bg-white/15 py-2 rounded-xl text-xs font-medium transition active:scale-95">
                             View Product
                           </button>
                         )}
                         {order.status === "delivered" && (
-                          <button
-                            onClick={() => navigate(`/product/${order.product_id}`)}
-                            className="flex-1 bg-green-600/20 text-green-400 py-2 rounded-xl text-xs font-medium transition active:scale-95"
-                          >
+                          <button onClick={() => navigate(`/product/${order.product_id}`)}
+                            className="flex-1 bg-green-600/20 text-green-400 py-2 rounded-xl text-xs font-medium transition active:scale-95">
                             Order Again
                           </button>
                         )}
@@ -295,27 +360,29 @@ export default function MyOrders() {
           </>
         )}
 
-        {/* BOOKINGS */}
+        {/* ── BOOKINGS ── */}
         {activeTab === "bookings" && (
           <>
             {bookings.length === 0 ? (
               <div className="text-center py-16 text-gray-400">
                 <p className="text-5xl mb-4">📋</p>
                 <p>No bookings yet</p>
-                <button
-                  onClick={() => navigate("/hire-worker")}
-                  className="mt-4 bg-green-600 px-6 py-3 rounded-2xl text-white text-sm font-semibold"
-                >
+                <button onClick={() => navigate("/hire-worker")}
+                  className="mt-4 bg-green-600 px-6 py-3 rounded-2xl text-white text-sm font-semibold">
                   Hire a Worker
                 </button>
               </div>
             ) : (
               bookings.map((booking) => {
-                const statusConfig = {
-                  accepted: { color: "text-green-400", bg: "bg-green-500/20", emoji: "✅" },
-                  rejected: { color: "text-red-400",   bg: "bg-red-500/20",   emoji: "❌" },
+                const sc = {
+                  accepted: { color: "text-green-400",  bg: "bg-green-500/20",  emoji: "✅" },
+                  rejected: { color: "text-red-400",    bg: "bg-red-500/20",    emoji: "❌" },
                   pending:  { color: "text-yellow-400", bg: "bg-yellow-500/20", emoji: "⏳" },
                 }[booking.status] || { color: "text-yellow-400", bg: "bg-yellow-500/20", emoji: "⏳" };
+
+                const session = trackingSessions[booking.id];
+                const isTrackingActive = session?.is_active;
+                const isTrackingLoading = trackingLoading[booking.id];
 
                 return (
                   <div key={booking.id} className="bg-[#101623] p-4 rounded-2xl border border-white/10 space-y-3">
@@ -327,45 +394,86 @@ export default function MyOrders() {
                         <p className="text-xs text-gray-400 mt-1">📍 {booking.location}</p>
                         <p className="text-xs text-gray-600 mt-0.5">{formatDate(booking.created_at)}</p>
                       </div>
-                      <span className={`text-xs px-2.5 py-1 rounded-full font-semibold whitespace-nowrap ${statusConfig.bg} ${statusConfig.color}`}>
-                        {statusConfig.emoji} {booking.status || "pending"}
+                      <span className={`text-xs px-2.5 py-1 rounded-full font-semibold whitespace-nowrap ${sc.bg} ${sc.color}`}>
+                        {sc.emoji} {booking.status || "pending"}
                       </span>
                     </div>
 
-                    <div className="flex gap-2 pt-1">
-                      {booking.status === "accepted" && (
-                        <>
-                          <button
-                            onClick={() => navigate(`/tracking/${booking.id}`)}
-                            className="flex-1 bg-blue-600 hover:bg-blue-700 py-2.5 rounded-xl text-xs font-semibold transition active:scale-95"
-                          >
-                            📍 Track Worker
-                          </button>
+                    {/* Accepted — tracking + message */}
+                    {booking.status === "accepted" && (
+                      <div className="space-y-2 pt-1">
+
+                        {/* Tracking status card */}
+                        {isTrackingActive ? (
+                          <div className="bg-green-500/5 border border-green-500/20 rounded-xl p-3">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-xs font-semibold text-green-400 flex items-center gap-1.5">
+                                  <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse inline-block" />
+                                  Worker is sharing location
+                                </p>
+                                <p className="text-[10px] text-gray-500 mt-0.5">
+                                  Tap Track to see them on the map
+                                </p>
+                              </div>
+                              <button
+                                onClick={() => stopTracking(booking.id)}
+                                disabled={isTrackingLoading}
+                                className="bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-500/30 px-3 py-1.5 rounded-lg text-xs font-semibold transition active:scale-95 disabled:opacity-50 whitespace-nowrap"
+                              >
+                                {isTrackingLoading ? "..." : "🛑 Stop"}
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="bg-white/5 border border-white/10 rounded-xl p-3 text-center">
+                            <p className="text-xs text-gray-500">
+                              {session
+                                ? "⏹ Tracking ended"
+                                : "⏳ Waiting for worker to start sharing location"}
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Action buttons */}
+                        <div className="flex gap-2">
+                          {isTrackingActive && (
+                            <button
+                              onClick={() => {
+                                startSharingClientLocation(booking.id);
+                                navigate(`/tracking/${booking.id}`);
+                              }}
+                              className="flex-1 bg-green-600 hover:bg-green-700 py-2.5 rounded-xl text-xs font-semibold transition active:scale-95 flex items-center justify-center gap-1.5"
+                            >
+                              <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
+                              Track Worker
+                            </button>
+                          )}
                           <button
                             onClick={() => navigate(`/inbox?user=${booking.worker_id}`)}
                             className="flex-1 bg-white/10 hover:bg-white/15 py-2.5 rounded-xl text-xs font-semibold transition active:scale-95"
                           >
                             💬 Message
                           </button>
-                        </>
-                      )}
-                      {(!booking.status || booking.status === "pending") && (
-                        <button
-                          onClick={() => navigate(`/seller-profile/${booking.worker_id}`)}
-                          className="flex-1 bg-white/10 hover:bg-white/15 py-2.5 rounded-xl text-xs font-semibold transition active:scale-95"
-                        >
-                          View Worker →
-                        </button>
-                      )}
-                      {booking.status === "rejected" && (
-                        <button
-                          onClick={() => navigate("/hire-worker")}
-                          className="flex-1 bg-green-600 hover:bg-green-700 py-2.5 rounded-xl text-xs font-semibold transition active:scale-95"
-                        >
-                          Find Another Worker
-                        </button>
-                      )}
-                    </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Pending */}
+                    {(!booking.status || booking.status === "pending") && (
+                      <button onClick={() => navigate(`/seller-profile/${booking.worker_id}`)}
+                        className="w-full bg-white/10 hover:bg-white/15 py-2.5 rounded-xl text-xs font-semibold transition active:scale-95">
+                        View Worker →
+                      </button>
+                    )}
+
+                    {/* Rejected */}
+                    {booking.status === "rejected" && (
+                      <button onClick={() => navigate("/hire-worker")}
+                        className="w-full bg-green-600 hover:bg-green-700 py-2.5 rounded-xl text-xs font-semibold transition active:scale-95">
+                        Find Another Worker
+                      </button>
+                    )}
                   </div>
                 );
               })

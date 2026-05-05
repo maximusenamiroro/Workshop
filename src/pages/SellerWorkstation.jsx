@@ -35,7 +35,8 @@ export default function SellerWorkstation() {
   const navigate = useNavigate();
   const geoWatchRef = useRef(null);
   const channelsRef = useRef([]);
-  const workerProductIdsRef = useRef([]); // cache product IDs for realtime filter
+  const workerProductIdsRef = useRef([]);
+  const trackingWatchRefs = useRef({});
   const { showToast, ToastUI } = useToast();
 
   const [products, setProducts] = useState([]);
@@ -50,14 +51,18 @@ export default function SellerWorkstation() {
   const [showUpload, setShowUpload] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [newOrderIds, setNewOrderIds] = useState(new Set());
+  const [trackingSessions, setTrackingSessions] = useState({});
+  const [trackingLoading, setTrackingLoading] = useState({});
 
   const [form, setForm] = useState({
     title: "", description: "", price: "", file: null,
   });
 
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (geoWatchRef.current) navigator.geolocation.clearWatch(geoWatchRef.current);
+      Object.values(trackingWatchRefs.current).forEach(id => navigator.geolocation.clearWatch(id));
       channelsRef.current.forEach(ch => supabase.removeChannel(ch));
       channelsRef.current = [];
     };
@@ -65,40 +70,32 @@ export default function SellerWorkstation() {
 
   useEffect(() => {
     if (!user) return;
-
     const init = async () => {
       await fetchAll();
-      // Setup realtime AFTER fetchAll so workerProductIdsRef is populated
       setupRealtime();
     };
-
     init();
   }, [user]);
 
   const setupRealtime = () => {
-    // Clean up existing channels first
     channelsRef.current.forEach(ch => supabase.removeChannel(ch));
     channelsRef.current = [];
 
-    // ── Bookings channel ──
     const bookingsChannel = supabase
       .channel(`workstation_bookings_${user.id}`)
       .on("postgres_changes", {
-        event: "INSERT",
-        schema: "public",
+        event: "INSERT", schema: "public",
         table: "hire_requests",
         filter: `worker_id=eq.${user.id}`,
       }, (payload) => {
         setBookings(prev => {
-          // avoid duplicates
           if (prev.find(b => b.id === payload.new.id)) return prev;
           return [payload.new, ...prev];
         });
         showToast("📋 New hire request received!", "success");
       })
       .on("postgres_changes", {
-        event: "UPDATE",
-        schema: "public",
+        event: "UPDATE", schema: "public",
         table: "hire_requests",
         filter: `worker_id=eq.${user.id}`,
       }, (payload) => {
@@ -106,78 +103,70 @@ export default function SellerWorkstation() {
           prev.map(b => b.id === payload.new.id ? { ...b, ...payload.new } : b)
         );
       })
-      .subscribe((status) => {
-        if (status === "SUBSCRIBED") {
-          console.log("Bookings channel subscribed");
-        }
-      });
+      .subscribe();
 
-    // ── Orders channel ──
-    // We watch ALL order inserts and filter by our product IDs in JS
-    // This is more reliable than complex Supabase filters
     const ordersChannel = supabase
       .channel(`workstation_orders_${user.id}`)
       .on("postgres_changes", {
-        event: "INSERT",
-        schema: "public",
-        table: "orders",
+        event: "INSERT", schema: "public", table: "orders",
       }, async (payload) => {
         const newOrder = payload.new;
         if (!newOrder?.product_id) return;
-
-        // Check if this order is for one of this worker's products
         const isMyProduct = workerProductIdsRef.current.includes(newOrder.product_id);
         if (!isMyProduct) return;
 
-        // Fetch buyer name
         const { data: buyer } = await supabase
-          .from("profiles")
-          .select("full_name")
-          .eq("id", newOrder.user_id)
-          .maybeSingle();
+          .from("profiles").select("full_name")
+          .eq("id", newOrder.user_id).maybeSingle();
 
-        const enrichedOrder = {
-          ...newOrder,
-          buyer_name: buyer?.full_name || "Customer",
-        };
-
+        const enrichedOrder = { ...newOrder, buyer_name: buyer?.full_name || "Customer" };
         setProductOrders(prev => {
           if (prev.find(o => o.id === newOrder.id)) return prev;
           return [enrichedOrder, ...prev];
         });
-
         setNewOrderIds(prev => new Set([...prev, newOrder.id]));
         showToast(`🛍️ New order from ${buyer?.full_name || "a customer"}!`);
-
         setTimeout(() => {
-          setNewOrderIds(prev => {
-            const next = new Set(prev);
-            next.delete(newOrder.id);
-            return next;
-          });
+          setNewOrderIds(prev => { const n = new Set(prev); n.delete(newOrder.id); return n; });
         }, 10000);
       })
       .on("postgres_changes", {
-        event: "UPDATE",
-        schema: "public",
-        table: "orders",
+        event: "UPDATE", schema: "public", table: "orders",
       }, (payload) => {
         const updated = payload.new;
         if (!updated?.product_id) return;
-        const isMyProduct = workerProductIdsRef.current.includes(updated.product_id);
-        if (!isMyProduct) return;
-
+        if (!workerProductIdsRef.current.includes(updated.product_id)) return;
         setProductOrders(prev =>
           prev.map(o => o.id === updated.id ? { ...o, ...updated } : o)
         );
       })
-      .subscribe((status) => {
-        if (status === "SUBSCRIBED") {
-          console.log("Orders channel subscribed");
-        }
-      });
+      .subscribe();
 
-    channelsRef.current = [bookingsChannel, ordersChannel];
+    // Track session updates from client side
+    const trackingChannel = supabase
+      .channel(`workstation_tracking_${user.id}`)
+      .on("postgres_changes", {
+        event: "UPDATE", schema: "public",
+        table: "tracking_sessions",
+        filter: `worker_id=eq.${user.id}`,
+      }, (payload) => {
+        const updated = payload.new;
+        setTrackingSessions(prev => ({
+          ...prev,
+          [updated.booking_id]: updated,
+        }));
+        // If client stopped tracking, clear our watch
+        if (!updated.is_active) {
+          if (trackingWatchRefs.current[updated.booking_id]) {
+            navigator.geolocation.clearWatch(trackingWatchRefs.current[updated.booking_id]);
+            delete trackingWatchRefs.current[updated.booking_id];
+          }
+          showToast("Client ended the tracking session", "warning");
+        }
+      })
+      .subscribe();
+
+    channelsRef.current = [bookingsChannel, ordersChannel, trackingChannel];
   };
 
   const fetchAll = async () => {
@@ -196,29 +185,21 @@ export default function SellerWorkstation() {
     if (!user) return;
     try {
       const { data } = await supabase
-        .from("workers")
-        .select("category, category_group")
-        .eq("id", user.id)
-        .maybeSingle();
+        .from("workers").select("category, category_group")
+        .eq("id", user.id).maybeSingle();
       setWorkerCategory(data?.category || null);
-    } catch (err) {
-      console.error("fetchWorkerCategory failed:", err.message);
-    }
+    } catch (err) { console.error("fetchWorkerCategory failed:", err.message); }
   };
 
   const fetchLiveStatus = async () => {
     if (!user) return;
     try {
       const { data } = await supabase
-        .from("live_workers")
-        .select("id, service")
-        .eq("worker_id", user.id)
-        .maybeSingle();
+        .from("live_workers").select("id, service")
+        .eq("worker_id", user.id).maybeSingle();
       if (data) { setIsLive(true); setService(data.service || ""); }
       else setIsLive(false);
-    } catch (err) {
-      console.error("fetchLiveStatus failed:", err.message);
-    }
+    } catch (err) { console.error("fetchLiveStatus failed:", err.message); }
   };
 
   const resolveCategory = (fallbackService = "") =>
@@ -229,60 +210,38 @@ export default function SellerWorkstation() {
     setLiveLoading(true);
     try {
       const finalService = resolveCategory(service);
-
       if (isLive) {
-        if (geoWatchRef.current) {
-          navigator.geolocation.clearWatch(geoWatchRef.current);
-          geoWatchRef.current = null;
-        }
+        if (geoWatchRef.current) { navigator.geolocation.clearWatch(geoWatchRef.current); geoWatchRef.current = null; }
         await supabase.from("live_workers").delete().eq("worker_id", user.id);
         setIsLive(false);
         setLiveLoading(false);
         showToast("You are now offline");
         return;
       }
-
-      if (!navigator.geolocation) {
-        showToast("Your device does not support location.", "error");
-        setLiveLoading(false);
-        return;
-      }
-
+      if (!navigator.geolocation) { showToast("Location not supported.", "error"); setLiveLoading(false); return; }
       if (navigator.permissions) {
         try {
           const perm = await navigator.permissions.query({ name: "geolocation" });
-          if (perm.state === "denied") {
-            showToast("Location blocked. Enable it in browser settings.", "error");
-            setLiveLoading(false);
-            return;
-          }
-        } catch (e) { /* permissions API not supported, continue */ }
+          if (perm.state === "denied") { showToast("Location blocked. Enable in browser settings.", "error"); setLiveLoading(false); return; }
+        } catch (e) { /* continue */ }
       }
-
       showToast("Getting your location...", "warning");
-
       navigator.geolocation.getCurrentPosition(
         async (pos) => {
           try {
             const { error } = await supabase.from("live_workers").upsert({
-              worker_id: user.id,
-              service: finalService,
-              lat: pos.coords.latitude,
-              lng: pos.coords.longitude,
-              last_seen: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
+              worker_id: user.id, service: finalService,
+              lat: pos.coords.latitude, lng: pos.coords.longitude,
+              last_seen: new Date().toISOString(), updated_at: new Date().toISOString(),
             });
             if (error) throw error;
-            setIsLive(true);
-            setService(finalService);
+            setIsLive(true); setService(finalService);
             showToast("🟢 You are now live!");
-
             geoWatchRef.current = navigator.geolocation.watchPosition(
               async (position) => {
                 try {
                   await supabase.from("live_workers").update({
-                    lat: position.coords.latitude,
-                    lng: position.coords.longitude,
+                    lat: position.coords.latitude, lng: position.coords.longitude,
                     last_seen: new Date().toISOString(),
                   }).eq("worker_id", user.id);
                 } catch (err) { console.error("GPS update error:", err.message); }
@@ -290,205 +249,74 @@ export default function SellerWorkstation() {
               (err) => console.warn("GPS watch error:", err.message),
               { enableHighAccuracy: false, maximumAge: 10000, timeout: 15000 }
             );
-          } catch (err) {
-            showToast("Failed to go live: " + err.message, "error");
-          } finally {
-            setLiveLoading(false);
-          }
+          } catch (err) { showToast("Failed to go live: " + err.message, "error"); }
+          finally { setLiveLoading(false); }
         },
         (err) => {
-          if (err.code === 1) showToast("Location access denied. Enable in browser settings.", "error");
+          if (err.code === 1) showToast("Location access denied.", "error");
           else if (err.code === 2) showToast("Could not get location. Turn on GPS.", "error");
-          else if (err.code === 3) showToast("Location timed out. Try again.", "error");
-          else showToast("Location error. Enable location and try again.", "error");
+          else if (err.code === 3) showToast("Location timed out.", "error");
+          else showToast("Location error.", "error");
           setLiveLoading(false);
         },
         { enableHighAccuracy: false, timeout: 12000, maximumAge: 0 }
       );
-    } catch (err) {
-      showToast("Failed: " + err.message, "error");
-      setLiveLoading(false);
-    }
+    } catch (err) { showToast("Failed: " + err.message, "error"); setLiveLoading(false); }
   };
 
   const fetchProducts = async () => {
     if (!user) return;
     try {
       const { data } = await supabase
-        .from("products")
-        .select("id, title, category, price, image_url, created_at")
-        .eq("worker_id", user.id)
-        .order("created_at", { ascending: false });
+        .from("products").select("id, title, category, price, image_url, created_at")
+        .eq("worker_id", user.id).order("created_at", { ascending: false });
       setProducts(data || []);
       if (data?.length > 0) {
-        // Cache product IDs for realtime filtering
         workerProductIdsRef.current = data.map(p => p.id);
         await fetchProductViews(data.map(p => p.id));
       }
-    } catch (err) {
-      console.error("fetchProducts failed:", err.message);
-    }
+    } catch (err) { console.error("fetchProducts failed:", err.message); }
   };
 
   const fetchProductViews = async (productIds) => {
     try {
       const { data, error } = await supabase
-        .from("product_views")
-        .select("product_id")
-        .in("product_id", productIds);
+        .from("product_views").select("product_id").in("product_id", productIds);
       if (error) throw error;
       const viewCounts = {};
-      (data || []).forEach(v => {
-        viewCounts[v.product_id] = (viewCounts[v.product_id] || 0) + 1;
-      });
+      (data || []).forEach(v => { viewCounts[v.product_id] = (viewCounts[v.product_id] || 0) + 1; });
       setProductViews(viewCounts);
-    } catch (err) {
-      console.error("fetchProductViews failed:", err.message);
-    }
+    } catch (err) { console.error("fetchProductViews failed:", err.message); }
   };
 
   const fetchProductOrders = async () => {
     if (!user) return;
     try {
-      // Step 1 — get this worker's product IDs
-      const { data: workerProducts, error: productsError } = await supabase
-        .from("products")
-        .select("id")
-        .eq("worker_id", user.id);
-
-      if (productsError) {
-        console.error("fetchProductOrders — products error:", productsError.message);
-        return;
-      }
-
-      if (!workerProducts || workerProducts.length === 0) {
-        setProductOrders([]);
-        return;
-      }
+      const { data: workerProducts, error: pErr } = await supabase
+        .from("products").select("id").eq("worker_id", user.id);
+      if (pErr) { console.error("products error:", pErr.message); return; }
+      if (!workerProducts?.length) { setProductOrders([]); return; }
 
       const productIds = workerProducts.map(p => p.id);
-      workerProductIdsRef.current = productIds; // keep ref updated
+      workerProductIdsRef.current = productIds;
 
-      // Step 2 — fetch orders for those products
-      const { data: ordersData, error: ordersError } = await supabase
+      const { data: ordersData, error: oErr } = await supabase
         .from("orders")
         .select("id, product_name, product_image_url, status, created_at, user_id, quantity, total_amount, product_id")
         .in("product_id", productIds)
         .order("created_at", { ascending: false });
+      if (oErr) { console.error("orders error:", oErr.message); return; }
+      if (!ordersData?.length) { setProductOrders([]); return; }
 
-      if (ordersError) {
-        console.error("fetchProductOrders — orders error:", ordersError.message);
-        return;
-      }
-
-      if (!ordersData || ordersData.length === 0) {
-        setProductOrders([]);
-        return;
-      }
-
-      // Step 3 — fetch buyer profiles
       const buyerIds = [...new Set(ordersData.map(o => o.user_id).filter(Boolean))];
       let buyerMap = {};
       if (buyerIds.length > 0) {
         const { data: buyersData } = await supabase
-          .from("profiles")
-          .select("id, full_name")
-          .in("id", buyerIds);
+          .from("profiles").select("id, full_name").in("id", buyerIds);
         (buyersData || []).forEach(b => { buyerMap[b.id] = b.full_name; });
       }
-
-      const merged = ordersData.map(o => ({
-        ...o,
-        buyer_name: buyerMap[o.user_id] || "Customer",
-      }));
-
-      console.log(`Fetched ${merged.length} orders for worker ${user.id}`);
-      setProductOrders(merged);
-    } catch (err) {
-      console.error("fetchProductOrders failed:", err.message);
-    }
-  };
-
-  const updateOrderStatus = async (orderId, status) => {
-    // Optimistic update first
-    setProductOrders(prev =>
-      prev.map(o => o.id === orderId ? { ...o, status } : o)
-    );
-
-    const { error } = await supabase
-      .from("orders")
-      .update({ status })
-      .eq("id", orderId);
-
-    if (error) {
-      console.error("updateOrderStatus error:", error.message);
-      showToast("Failed to update: " + error.message, "error");
-      // Revert
-      fetchProductOrders();
-    } else {
-      showToast(`Order marked as "${status}"`);
-    }
-  };
-
-  const uploadProduct = async () => {
-    if (!form.title) { showToast("Title is required", "warning"); return; }
-    if (!user) return;
-    setUploading(true);
-    try {
-      let imageUrl = null;
-      if (form.file) {
-        if (!form.file.type.startsWith("image/")) throw new Error("Please select an image file");
-        const sizeMB = form.file.size / (1024 * 1024);
-        if (sizeMB > 10) throw new Error(`Image too large. Use under 10MB`);
-        const ext = form.file.name.split(".").pop().toLowerCase();
-        const fileName = `${user.id}_${Date.now()}.${ext}`;
-        const { error: uploadError } = await supabase.storage
-          .from("products")
-          .upload(fileName, form.file, { cacheControl: "3600", upsert: false, contentType: form.file.type });
-        if (uploadError) throw new Error("Image upload failed: " + uploadError.message);
-        const { data: urlData } = supabase.storage.from("products").getPublicUrl(fileName);
-        imageUrl = urlData.publicUrl;
-      }
-      const finalCategory = resolveCategory(service);
-      const { data: newProduct, error } = await supabase.from("products").insert({
-        worker_id: user.id,
-        title: form.title,
-        description: form.description || "",
-        price: form.price ? parseFloat(form.price) : null,
-        category: finalCategory,
-        image_url: imageUrl,
-      }).select().single();
-      if (error) throw new Error("Failed to save product: " + error.message);
-
-      // Update the product IDs ref immediately
-      if (newProduct) {
-        workerProductIdsRef.current = [...workerProductIdsRef.current, newProduct.id];
-      }
-
-      setForm({ title: "", description: "", price: "", file: null });
-      setShowUpload(false);
-      fetchProducts();
-      showToast(`Product posted under "${finalCategory}"`);
-    } catch (err) {
-      showToast(err.message, "error");
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const deleteProduct = async (product) => {
-    try {
-      await supabase.from("products").delete().eq("id", product.id);
-      if (product.image_url) {
-        const fileName = product.image_url.split("/").pop();
-        await supabase.storage.from("products").remove([fileName]);
-      }
-      setProducts(prev => prev.filter(p => p.id !== product.id));
-      workerProductIdsRef.current = workerProductIdsRef.current.filter(id => id !== product.id);
-      showToast("Product deleted");
-    } catch (err) {
-      showToast("Failed to delete product", "error");
-    }
+      setProductOrders(ordersData.map(o => ({ ...o, buyer_name: buyerMap[o.user_id] || "Customer" })));
+    } catch (err) { console.error("fetchProductOrders failed:", err.message); }
   };
 
   const fetchBookings = async () => {
@@ -501,20 +329,148 @@ export default function SellerWorkstation() {
         .order("created_at", { ascending: false })
         .limit(20);
       setBookings(data || []);
-    } catch (err) {
-      console.error("fetchBookings failed:", err.message);
-    }
+
+      // Fetch tracking sessions for accepted bookings
+      const accepted = (data || []).filter(b => b.status === "accepted");
+      if (accepted.length > 0) {
+        const { data: sessions } = await supabase
+          .from("tracking_sessions")
+          .select("*")
+          .in("booking_id", accepted.map(b => b.id));
+        const sessionMap = {};
+        (sessions || []).forEach(s => { sessionMap[s.booking_id] = s; });
+        setTrackingSessions(sessionMap);
+      }
+    } catch (err) { console.error("fetchBookings failed:", err.message); }
+  };
+
+  const updateOrderStatus = async (orderId, status) => {
+    setProductOrders(prev => prev.map(o => o.id === orderId ? { ...o, status } : o));
+    const { error } = await supabase.from("orders").update({ status }).eq("id", orderId);
+    if (error) { showToast("Failed to update: " + error.message, "error"); fetchProductOrders(); }
+    else showToast(`Order marked as "${status}"`);
+  };
+
+  const uploadProduct = async () => {
+    if (!form.title) { showToast("Title is required", "warning"); return; }
+    if (!user) return;
+    setUploading(true);
+    try {
+      let imageUrl = null;
+      if (form.file) {
+        if (!form.file.type.startsWith("image/")) throw new Error("Please select an image file");
+        const sizeMB = form.file.size / (1024 * 1024);
+        if (sizeMB > 10) throw new Error("Image too large. Use under 10MB");
+        const ext = form.file.name.split(".").pop().toLowerCase();
+        const fileName = `${user.id}_${Date.now()}.${ext}`;
+        const { error: uploadError } = await supabase.storage
+          .from("products").upload(fileName, form.file, { cacheControl: "3600", upsert: false, contentType: form.file.type });
+        if (uploadError) throw new Error("Image upload failed: " + uploadError.message);
+        const { data: urlData } = supabase.storage.from("products").getPublicUrl(fileName);
+        imageUrl = urlData.publicUrl;
+      }
+      const finalCategory = resolveCategory(service);
+      const { data: newProduct, error } = await supabase.from("products").insert({
+        worker_id: user.id, title: form.title,
+        description: form.description || "",
+        price: form.price ? parseFloat(form.price) : null,
+        category: finalCategory, image_url: imageUrl,
+      }).select().single();
+      if (error) throw new Error("Failed to save product: " + error.message);
+      if (newProduct) workerProductIdsRef.current = [...workerProductIdsRef.current, newProduct.id];
+      setForm({ title: "", description: "", price: "", file: null });
+      setShowUpload(false);
+      fetchProducts();
+      showToast(`Product posted under "${finalCategory}"`);
+    } catch (err) { showToast(err.message, "error"); }
+    finally { setUploading(false); }
+  };
+
+  const deleteProduct = async (product) => {
+    try {
+      await supabase.from("products").delete().eq("id", product.id);
+      if (product.image_url) {
+        const fileName = product.image_url.split("/").pop();
+        await supabase.storage.from("products").remove([fileName]);
+      }
+      setProducts(prev => prev.filter(p => p.id !== product.id));
+      workerProductIdsRef.current = workerProductIdsRef.current.filter(id => id !== product.id);
+      showToast("Product deleted");
+    } catch (err) { showToast("Failed to delete product", "error"); }
   };
 
   const updateBookingStatus = async (id, status) => {
     setBookings(prev => prev.map(b => b.id === id ? { ...b, status } : b));
     const { error } = await supabase.from("hire_requests").update({ status }).eq("id", id);
-    if (error) {
-      showToast("Failed to update: " + error.message, "error");
-      fetchBookings();
-    } else {
-      showToast(`Booking ${status}`);
+    if (error) { showToast("Failed to update: " + error.message, "error"); fetchBookings(); }
+    else showToast(`Booking ${status}`);
+  };
+
+  // ── TRACKING ──────────────────────────────────────────────
+  const startTracking = async (booking) => {
+    if (!user) return;
+    setTrackingLoading(prev => ({ ...prev, [booking.id]: true }));
+    try {
+      if (navigator.permissions) {
+        try {
+          const perm = await navigator.permissions.query({ name: "geolocation" });
+          if (perm.state === "denied") { showToast("Location blocked. Enable GPS.", "error"); return; }
+        } catch (e) { /* continue */ }
+      }
+      const pos = await new Promise((resolve, reject) =>
+        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: false, timeout: 12000 })
+      );
+      const { data: session, error } = await supabase
+        .from("tracking_sessions")
+        .upsert({
+          booking_id: booking.id,
+          worker_id: user.id,
+          client_id: booking.client_id,
+          worker_lat: pos.coords.latitude,
+          worker_lng: pos.coords.longitude,
+          is_active: true,
+          started_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "booking_id" })
+        .select().single();
+      if (error) throw error;
+      setTrackingSessions(prev => ({ ...prev, [booking.id]: session }));
+      showToast("📍 Tracking started — client can see your location!");
+
+      const watchId = navigator.geolocation.watchPosition(
+        async (position) => {
+          await supabase.from("tracking_sessions").update({
+            worker_lat: position.coords.latitude,
+            worker_lng: position.coords.longitude,
+            updated_at: new Date().toISOString(),
+          }).eq("booking_id", booking.id);
+        },
+        (err) => console.warn("Tracking GPS error:", err.message),
+        { enableHighAccuracy: false, maximumAge: 5000, timeout: 15000 }
+      );
+      trackingWatchRefs.current[booking.id] = watchId;
+    } catch (err) {
+      if (err.code === 1) showToast("Location access denied.", "error");
+      else showToast("Failed to start tracking: " + err.message, "error");
+    } finally {
+      setTrackingLoading(prev => ({ ...prev, [booking.id]: false }));
     }
+  };
+
+  const stopTracking = async (booking) => {
+    setTrackingLoading(prev => ({ ...prev, [booking.id]: true }));
+    try {
+      await supabase.from("tracking_sessions")
+        .update({ is_active: false, updated_at: new Date().toISOString() })
+        .eq("booking_id", booking.id);
+      if (trackingWatchRefs.current[booking.id]) {
+        navigator.geolocation.clearWatch(trackingWatchRefs.current[booking.id]);
+        delete trackingWatchRefs.current[booking.id];
+      }
+      setTrackingSessions(prev => ({ ...prev, [booking.id]: { ...prev[booking.id], is_active: false } }));
+      showToast("Tracking stopped");
+    } catch (err) { showToast("Failed to stop tracking", "error"); }
+    finally { setTrackingLoading(prev => ({ ...prev, [booking.id]: false })); }
   };
 
   if (loading) return (
@@ -572,29 +528,26 @@ export default function SellerWorkstation() {
           className="w-full p-2 mb-3 bg-black/30 rounded text-white"
         >
           <option value="">Auto (Use Category: {workerCategory || "General"})</option>
-          <option value="Sale's Representative">Sale's Representative</option>
-          <option value="Office help">Office help</option>
-          <option value="House keeping">House keeping</option>
-          <option value="Cook">Cook</option>
-          <option value="Receptionist">Receptionist</option>
-          <option value="Security">Security</option>
-          <option value="Drivers">Drivers</option>
-          <option value="Cashier">Cashier</option>
-          <option value="Personal Assistant">Personal Assistant</option>
-          <option value="Body Massage">Body Massage</option>
+          <option>Sale's Representative</option>
+          <option>Office help</option>
+          <option>House keeping</option>
+          <option>Cook</option>
+          <option>Receptionist</option>
+          <option>Security</option>
+          <option>Drivers</option>
+          <option>Cashier</option>
+          <option>Personal Assistant</option>
+          <option>Body Massage</option>
         </select>
         <div className="flex items-center justify-between">
           <span className={isLive ? "text-green-400 font-semibold" : "text-gray-400"}>
             {isLive ? "🟢 You are Live" : "⚫ Offline"}
           </span>
           <button onClick={toggleLive} disabled={liveLoading}>
-            {liveLoading ? (
-              <div className="w-6 h-6 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
-            ) : isLive ? (
-              <FaToggleOn size={32} className="text-green-400" />
-            ) : (
-              <FaToggleOff size={32} className="text-gray-400" />
-            )}
+            {liveLoading
+              ? <div className="w-6 h-6 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+              : isLive ? <FaToggleOn size={32} className="text-green-400" /> : <FaToggleOff size={32} className="text-gray-400" />
+            }
           </button>
         </div>
       </div>
@@ -612,10 +565,7 @@ export default function SellerWorkstation() {
           </h2>
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-500">{productOrders.length} total</span>
-            <button
-              onClick={fetchProductOrders}
-              className="text-xs text-green-400 bg-green-500/10 px-2 py-0.5 rounded-full"
-            >
+            <button onClick={fetchProductOrders} className="text-xs text-green-400 bg-green-500/10 px-2 py-0.5 rounded-full">
               Refresh
             </button>
           </div>
@@ -632,9 +582,7 @@ export default function SellerWorkstation() {
             <div
               key={o.id}
               className={`py-3 border-b border-white/10 transition-all duration-500 ${
-                newOrderIds.has(o.id)
-                  ? "bg-green-500/5 border-l-2 border-l-green-500 pl-2 rounded-r-lg"
-                  : ""
+                newOrderIds.has(o.id) ? "bg-green-500/5 border-l-2 border-l-green-500 pl-2 rounded-r-lg" : ""
               }`}
             >
               {newOrderIds.has(o.id) && (
@@ -643,14 +591,12 @@ export default function SellerWorkstation() {
                   <span className="text-[10px] text-green-400 font-semibold">New Order!</span>
                 </div>
               )}
-
               <div className="flex justify-between items-start mb-2">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-lg overflow-hidden bg-white/10 flex items-center justify-center flex-shrink-0">
                     {o.product_image_url
                       ? <img src={o.product_image_url} className="w-full h-full object-cover" alt={o.product_name} />
-                      : <span>📦</span>
-                    }
+                      : <span>📦</span>}
                   </div>
                   <div>
                     <p className="text-sm font-medium">{o.product_name}</p>
@@ -663,9 +609,7 @@ export default function SellerWorkstation() {
                     <p className="text-xs text-gray-500">{formatDate(o.created_at)}</p>
                     {o.quantity && <p className="text-xs text-gray-400">Qty: {o.quantity}</p>}
                     {o.total_amount && (
-                      <p className="text-xs text-green-400 font-semibold">
-                        ₦{Number(o.total_amount).toLocaleString()}
-                      </p>
+                      <p className="text-xs text-green-400 font-semibold">₦{Number(o.total_amount).toLocaleString()}</p>
                     )}
                   </div>
                 </div>
@@ -673,8 +617,6 @@ export default function SellerWorkstation() {
                   {o.status || "pending"}
                 </span>
               </div>
-
-              {/* Status update buttons */}
               <div className="mb-2">
                 <p className="text-[10px] text-gray-500 mb-1.5">Update Status:</p>
                 <div className="flex gap-1.5 flex-wrap">
@@ -683,21 +625,15 @@ export default function SellerWorkstation() {
                       key={s}
                       onClick={() => updateOrderStatus(o.id, s)}
                       className={`text-xs px-2.5 py-1 rounded-lg transition-all active:scale-95 ${
-                        o.status === s
-                          ? "bg-green-600 text-white font-semibold shadow-sm"
-                          : "bg-white/10 hover:bg-white/20 text-gray-300"
+                        o.status === s ? "bg-green-600 text-white font-semibold" : "bg-white/10 hover:bg-white/20 text-gray-300"
                       }`}
                     >
-                      {s === "shipping" && "📦 "}
-                      {s === "on the way" && "🚚 "}
-                      {s === "arriving" && "📍 "}
-                      {s === "delivered" && "✅ "}
-                      {s}
+                      {s === "shipping" && "📦 "}{s === "on the way" && "🚚 "}
+                      {s === "arriving" && "📍 "}{s === "delivered" && "✅ "}{s}
                     </button>
                   ))}
                 </div>
               </div>
-
               <button
                 onClick={() => navigate(`/inbox?user=${o.user_id}`)}
                 className="w-full mt-1 bg-white/10 hover:bg-white/20 py-1.5 rounded-lg text-xs transition"
@@ -720,33 +656,20 @@ export default function SellerWorkstation() {
 
         {showUpload && (
           <div className="space-y-2 mb-4 bg-black/20 p-3 rounded-xl">
-            <input
-              placeholder="Title *"
-              value={form.title}
+            <input placeholder="Title *" value={form.title}
               className="w-full p-2 bg-black/30 rounded text-white placeholder-gray-500 outline-none"
-              onChange={(e) => setForm({ ...form, title: e.target.value })}
-            />
-            <input
-              placeholder="Price ₦ (optional)"
-              type="number"
-              value={form.price}
+              onChange={(e) => setForm({ ...form, title: e.target.value })} />
+            <input placeholder="Price ₦ (optional)" type="number" value={form.price}
               className="w-full p-2 bg-black/30 rounded text-white placeholder-gray-500 outline-none"
-              onChange={(e) => setForm({ ...form, price: e.target.value })}
-            />
-            <textarea
-              placeholder="Description (optional)"
-              value={form.description}
-              rows={2}
+              onChange={(e) => setForm({ ...form, price: e.target.value })} />
+            <textarea placeholder="Description (optional)" value={form.description} rows={2}
               className="w-full p-2 bg-black/30 rounded text-white placeholder-gray-500 outline-none"
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-            />
+              onChange={(e) => setForm({ ...form, description: e.target.value })} />
             <div>
               <label className="text-xs text-gray-400 block mb-1">Product Image (optional)</label>
               <label className="flex items-center gap-2 cursor-pointer bg-black/30 p-2 rounded border border-white/10 hover:border-green-500/50 transition">
                 <span className="text-green-400 text-sm">📷</span>
-                <span className="text-sm text-gray-300 truncate">
-                  {form.file ? form.file.name : "Tap to choose image"}
-                </span>
+                <span className="text-sm text-gray-300 truncate">{form.file ? form.file.name : "Tap to choose image"}</span>
                 <input type="file" accept="image/*" className="hidden"
                   onChange={(e) => setForm({ ...form, file: e.target.files[0] })} />
               </label>
@@ -759,19 +682,12 @@ export default function SellerWorkstation() {
             </div>
             <p className="text-xs text-gray-500">Category: {resolveCategory(service)}</p>
             <div className="flex gap-2">
-              <button
-                onClick={uploadProduct}
-                disabled={uploading || !form.title}
-                className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 px-3 py-2 rounded text-sm font-semibold transition"
-              >
+              <button onClick={uploadProduct} disabled={uploading || !form.title}
+                className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 px-3 py-2 rounded text-sm font-semibold transition">
                 {uploading ? "Uploading..." : "Upload Product"}
               </button>
-              <button
-                onClick={() => { setShowUpload(false); setForm({ title: "", description: "", price: "", file: null }); }}
-                className="px-3 py-2 bg-white/10 rounded text-sm"
-              >
-                Cancel
-              </button>
+              <button onClick={() => { setShowUpload(false); setForm({ title: "", description: "", price: "", file: null }); }}
+                className="px-3 py-2 bg-white/10 rounded text-sm">Cancel</button>
             </div>
           </div>
         )}
@@ -783,10 +699,7 @@ export default function SellerWorkstation() {
             <div key={p.id} className="flex justify-between items-center py-3 border-b border-white/10">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-xl overflow-hidden bg-white/10 flex items-center justify-center flex-shrink-0">
-                  {p.image_url
-                    ? <img src={p.image_url} alt={p.title} className="w-full h-full object-cover" />
-                    : <span>📦</span>
-                  }
+                  {p.image_url ? <img src={p.image_url} alt={p.title} className="w-full h-full object-cover" /> : <span>📦</span>}
                 </div>
                 <div>
                   <p className="text-sm font-medium">{p.title}</p>
@@ -822,47 +735,94 @@ export default function SellerWorkstation() {
             </span>
           )}
         </div>
+
         {bookings.length === 0 ? (
           <p className="text-gray-500 text-sm">No hire requests yet.</p>
         ) : (
-          bookings.map((b) => (
-            <div key={b.id} className="py-3 border-b border-white/10">
-              <div className="flex justify-between items-start mb-2">
-                <div>
-                  <p className="text-sm font-medium">{b.job_description || "Job Request"}</p>
-                  <p className="text-xs text-gray-500">📍 {b.location}</p>
-                  <p className="text-xs text-gray-500">{formatDate(b.created_at)}</p>
+          bookings.map((b) => {
+            const session = trackingSessions[b.id];
+            const isTracking = session?.is_active;
+            const isTrackingLoading = trackingLoading[b.id];
+
+            return (
+              <div key={b.id} className="py-4 border-b border-white/10">
+                <div className="flex justify-between items-start mb-2">
+                  <div className="flex-1 min-w-0 pr-2">
+                    <p className="text-sm font-medium truncate">{b.job_description || "Job Request"}</p>
+                    <p className="text-xs text-gray-500">📍 {b.location}</p>
+                    <p className="text-xs text-gray-500">{formatDate(b.created_at)}</p>
+                  </div>
+                  <span className={`text-xs px-2 py-1 rounded-full whitespace-nowrap flex-shrink-0 ${BOOKING_STATUS_COLOR[b.status] || BOOKING_STATUS_COLOR.pending}`}>
+                    {b.status || "pending"}
+                  </span>
                 </div>
-                <span className={`text-xs px-2 py-1 rounded-full ${BOOKING_STATUS_COLOR[b.status] || BOOKING_STATUS_COLOR.pending}`}>
-                  {b.status || "pending"}
-                </span>
+
+                {/* Pending — accept/reject */}
+                {(!b.status || b.status === "pending") && (
+                  <div className="flex gap-2 mt-2">
+                    <button onClick={() => updateBookingStatus(b.id, "accepted")}
+                      className="flex-1 bg-green-600 hover:bg-green-700 py-1.5 rounded-lg text-xs font-semibold transition active:scale-95">
+                      ✅ Accept
+                    </button>
+                    <button onClick={() => updateBookingStatus(b.id, "rejected")}
+                      className="flex-1 bg-red-600/20 hover:bg-red-600/40 text-red-400 py-1.5 rounded-lg text-xs font-semibold transition active:scale-95">
+                      ❌ Reject
+                    </button>
+                  </div>
+                )}
+
+                {/* Accepted — tracking + message */}
+                {b.status === "accepted" && (
+                  <div className="mt-2 space-y-2">
+                    {/* Tracking card */}
+                    <div className={`rounded-xl p-3 border ${isTracking ? "bg-green-500/5 border-green-500/20" : "bg-white/5 border-white/10"}`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1 min-w-0 pr-2">
+                          <p className="text-xs font-semibold text-white flex items-center gap-1.5">
+                            {isTracking && <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse inline-block" />}
+                            {isTracking ? "Sharing Location" : "Share Location"}
+                          </p>
+                          <p className="text-[10px] text-gray-500 mt-0.5">
+                            {isTracking
+                              ? "Client can see your location in real-time"
+                              : "Start sharing so client can track you"}
+                          </p>
+                        </div>
+                        {isTracking ? (
+                          <button
+                            onClick={() => stopTracking(b)}
+                            disabled={isTrackingLoading}
+                            className="bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-500/30 px-3 py-1.5 rounded-lg text-xs font-semibold transition active:scale-95 disabled:opacity-50 whitespace-nowrap"
+                          >
+                            {isTrackingLoading ? "..." : "🛑 Stop"}
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => startTracking(b)}
+                            disabled={isTrackingLoading}
+                            className="bg-green-600 hover:bg-green-700 disabled:bg-gray-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition active:scale-95 whitespace-nowrap flex items-center gap-1"
+                          >
+                            {isTrackingLoading
+                              ? <><div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" /> Starting...</>
+                              : "📍 Start"
+                            }
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Message client */}
+                    <button
+                      onClick={() => navigate(`/inbox?user=${b.client_id}`)}
+                      className="w-full bg-white/10 hover:bg-white/20 py-1.5 rounded-lg text-xs transition"
+                    >
+                      💬 Message Client
+                    </button>
+                  </div>
+                )}
               </div>
-              {(!b.status || b.status === "pending") && (
-                <div className="flex gap-2 mt-2">
-                  <button
-                    onClick={() => updateBookingStatus(b.id, "accepted")}
-                    className="flex-1 bg-green-600 hover:bg-green-700 py-1.5 rounded-lg text-xs font-semibold transition active:scale-95"
-                  >
-                    ✅ Accept
-                  </button>
-                  <button
-                    onClick={() => updateBookingStatus(b.id, "rejected")}
-                    className="flex-1 bg-red-600/20 hover:bg-red-600/40 text-red-400 py-1.5 rounded-lg text-xs font-semibold transition active:scale-95"
-                  >
-                    ❌ Reject
-                  </button>
-                </div>
-              )}
-              {b.status === "accepted" && (
-                <button
-                  onClick={() => navigate(`/inbox?user=${b.client_id}`)}
-                  className="w-full mt-2 bg-white/10 hover:bg-white/20 py-1.5 rounded-lg text-xs transition"
-                >
-                  💬 Message Client
-                </button>
-              )}
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>

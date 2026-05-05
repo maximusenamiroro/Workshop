@@ -9,22 +9,72 @@ export const useAuth = () => {
   return context;
 };
 
+const INACTIVITY_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [role, setRole] = useState(() => {
-    // Load cached role instantly — no DB call needed on first render
-    return localStorage.getItem("userRole") || null;
-  });
+  const [role, setRole] = useState(() => localStorage.getItem("userRole") || null);
   const [loading, setLoading] = useState(true);
-  const initializedRef = useRef(false);
 
+  const initializedRef = useRef(false);
+  const inactivityTimerRef = useRef(null);
+  const userRef = useRef(null); // track user in ref so timer callback can read it
+
+  // Keep userRef in sync
+  useEffect(() => { userRef.current = user; }, [user]);
+
+  // ── Inactivity logout ──────────────────────────────────────
+  const clearInactivityTimer = () => {
+    if (inactivityTimerRef.current) {
+      clearTimeout(inactivityTimerRef.current);
+      inactivityTimerRef.current = null;
+    }
+  };
+
+  const resetInactivityTimer = () => {
+    // Only run timer when someone is actually logged in
+    if (!userRef.current) return;
+    clearInactivityTimer();
+    inactivityTimerRef.current = setTimeout(() => {
+      if (userRef.current) {
+        performLogout();
+      }
+    }, INACTIVITY_TIMEOUT);
+  };
+
+  useEffect(() => {
+    const events = ["mousedown", "mousemove", "keydown", "touchstart", "scroll", "click"];
+    const handleActivity = () => resetInactivityTimer();
+
+    events.forEach(e => window.addEventListener(e, handleActivity, { passive: true }));
+
+    return () => {
+      events.forEach(e => window.removeEventListener(e, handleActivity));
+      clearInactivityTimer();
+    };
+  }, []); // mount once — resetInactivityTimer reads userRef so no stale closure
+
+  // ── Core logout logic (used by both manual + inactivity) ──
+  const performLogout = async () => {
+    clearInactivityTimer();
+    try {
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.error("Logout error:", err.message);
+    } finally {
+      setUser(null);
+      setRole(null);
+      localStorage.removeItem("userRole");
+    }
+  };
+
+  // ── Profile loader ─────────────────────────────────────────
   const loadProfile = async (userId) => {
     try {
-      // Check cache first
       const cachedRole = localStorage.getItem("userRole");
       if (cachedRole) {
         setRole(cachedRole);
-        // Still fetch in background to ensure it's fresh
+        // Refresh in background silently
         supabase
           .from("profiles")
           .select("role")
@@ -39,7 +89,6 @@ export const AuthProvider = ({ children }) => {
         return;
       }
 
-      // No cache — fetch from DB
       const { data, error } = await supabase
         .from("profiles")
         .select("role")
@@ -58,19 +107,22 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // ── Auth state listener ────────────────────────────────────
   useEffect(() => {
     let mounted = true;
 
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!mounted) return;
+
       if (session?.user) {
         setUser(session.user);
         await loadProfile(session.user.id);
+        resetInactivityTimer(); // start timer once user is confirmed
       } else {
-        // No session — clear cache
         localStorage.removeItem("userRole");
         setRole(null);
       }
+
       setLoading(false);
       initializedRef.current = true;
     });
@@ -84,6 +136,7 @@ export const AuthProvider = ({ children }) => {
           setUser(null);
           setRole(null);
           localStorage.removeItem("userRole");
+          clearInactivityTimer();
           setLoading(false);
           return;
         }
@@ -91,12 +144,14 @@ export const AuthProvider = ({ children }) => {
         if (event === "SIGNED_IN" && initializedRef.current && session?.user) {
           setUser(session.user);
           await loadProfile(session.user.id);
+          resetInactivityTimer(); // start timer on new sign-in
           setLoading(false);
           return;
         }
 
         if (event === "TOKEN_REFRESHED" && session?.user) {
           setUser(session.user);
+          resetInactivityTimer(); // reset timer on token refresh (proves user is active)
         }
       }
     );
@@ -107,23 +162,11 @@ export const AuthProvider = ({ children }) => {
     };
   }, []);
 
-  const logout = async () => {
-    try {
-      await supabase.auth.signOut();
-    } catch (err) {
-      console.error("Logout error:", err.message);
-    } finally {
-      setUser(null);
-      setRole(null);
-      localStorage.removeItem("userRole");
-    }
-  };
-
   const value = {
     user,
     role,
     loading,
-    logout,
+    logout: performLogout, // expose performLogout as logout
     isClient: role === "client",
     isWorker: role === "worker",
   };
