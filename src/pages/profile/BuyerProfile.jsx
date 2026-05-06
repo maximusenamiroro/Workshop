@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import {
   FaBookmark, FaShoppingBag, FaBox,
   FaEllipsisV, FaUserEdit, FaPlus,
-  FaPlay, FaTimes, FaTrash
+  FaPlay, FaTimes, FaBell,
 } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
@@ -14,13 +14,16 @@ export default function BuyerProfile() {
   const { user, logout } = useAuth();
   const containerRef = useRef(null);
   const { showToast, ToastUI } = useToast();
+  const fileInputRef = useRef(null);
 
   const [profileImage, setProfileImage] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [viewingProfileImage, setViewingProfileImage] = useState(false);
   const [activeTab, setActiveTab] = useState("orders");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [orders, setOrders] = useState([]);
   const [bookings, setBookings] = useState([]);
@@ -30,7 +33,7 @@ export default function BuyerProfile() {
   const videoRef = useRef(null);
 
   const [profile, setProfile] = useState({ full_name: "", country: "", avatar_url: "", bio: "" });
-  const [formData, setFormData] = useState(profile);
+  const [formData, setFormData] = useState({ full_name: "", country: "", bio: "" });
 
   useEffect(() => {
     if (!user) return;
@@ -59,21 +62,25 @@ export default function BuyerProfile() {
       if (error) throw error;
       if (data) {
         setProfile(data);
-        setFormData(data);
+        setFormData({
+          full_name: data.full_name || "",
+          country: data.country || "",
+          bio: data.bio || "",
+        });
         if (data.avatar_url) setProfileImage(data.avatar_url);
       }
     } catch (err) {
-      console.error("Fetch profile error:", err.message);
+      console.error("fetchProfile error:", err.message);
     }
   };
 
   const fetchOrders = async () => {
     const { data } = await supabase
       .from("orders")
-      .select("id, product_name, status, created_at, price")
+      .select("id, product_name, status, created_at, price, total_amount, product_image_url")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
-      .limit(10);
+      .limit(20);
     setOrders(data || []);
   };
 
@@ -83,7 +90,7 @@ export default function BuyerProfile() {
       .select("id, job_description, status, created_at, location, worker_id")
       .eq("client_id", user.id)
       .order("created_at", { ascending: false })
-      .limit(10);
+      .limit(20);
     setBookings(data || []);
   };
 
@@ -105,66 +112,127 @@ export default function BuyerProfile() {
   };
 
   const unsaveReel = async (reelId) => {
-    await supabase.from("saved_reels").delete().eq("user_id", user.id).eq("reel_id", reelId);
+    await supabase.from("saved_reels").delete()
+      .eq("user_id", user.id).eq("reel_id", reelId);
     setSavedReels(prev => prev.filter(r => r.id !== reelId));
     if (activeReel?.id === reelId) setActiveReel(null);
     showToast("Reel unsaved");
   };
 
-  const changeProfile = async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
+  // ── Avatar upload — completely rewritten to be reliable ──
+  const handleAvatarChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-  if (!file.type.startsWith("image/")) {
-    showToast("Please select an image file", "error");
-    return;
-  }
-  const sizeMB = file.size / (1024 * 1024);
-  if (sizeMB > 5) {
-    showToast(`Image is ${sizeMB.toFixed(1)}MB — please use an image under 5MB`, "error");
-    return;
-  }
+    // Reset input so same file can be selected again
+    e.target.value = "";
 
-  // Show preview immediately
-  setProfileImage(URL.createObjectURL(file));
-  showToast("Uploading...", "warning");
+    if (!file.type.startsWith("image/")) {
+      showToast("Please select an image file", "error");
+      return;
+    }
+    const sizeMB = file.size / (1024 * 1024);
+    if (sizeMB > 5) {
+      showToast(`Image is ${sizeMB.toFixed(1)}MB — max 5MB`, "error");
+      return;
+    }
 
-  try {
-    const fileExt = file.name.split(".").pop().toLowerCase();
-    const fileName = `${user.id}/avatar.${fileExt}`;
+    // Show local preview immediately
+    const localUrl = URL.createObjectURL(file);
+    setProfileImage(localUrl);
+    setUploading(true);
+    showToast("Uploading photo...", "warning");
 
-    const { error: uploadError } = await supabase.storage
-      .from("avatars")
-      .upload(fileName, file, {
-        upsert: true,
-        contentType: file.type,
-        cacheControl: "3600",
-      });
+    try {
+      const fileExt = file.name.split(".").pop().toLowerCase() || "jpg";
+      // Use a unique filename each time to bust CDN cache
+      const fileName = `${user.id}_${Date.now()}.${fileExt}`;
 
-    if (uploadError) throw uploadError;
+      // Delete old avatar files for this user to keep storage clean
+      const { data: existingFiles } = await supabase.storage
+        .from("avatars")
+        .list(user.id);
+      if (existingFiles?.length > 0) {
+        const toDelete = existingFiles.map(f => `${user.id}/${f.name}`);
+        await supabase.storage.from("avatars").remove(toDelete);
+      }
 
-    const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(fileName);
-    const freshUrl = `${urlData.publicUrl}?t=${Date.now()}`;
-    await supabase.from("profiles").update({ avatar_url: urlData.publicUrl }).eq("id", user.id);
-    setProfileImage(freshUrl);
-    showToast("Profile picture updated!");
-  } catch (err) {
-    setProfileImage(profile.avatar_url || null);
-    showToast("Failed to upload: " + err.message, "error");
-  }
-};
+      // Upload new file
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(`${user.id}/${fileName}`, file, {
+          cacheControl: "3600",
+          upsert: false,
+          contentType: file.type,
+        });
+
+      if (uploadError) throw new Error("Upload failed: " + uploadError.message);
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from("avatars")
+        .getPublicUrl(`${user.id}/${fileName}`);
+
+      if (!urlData?.publicUrl) throw new Error("Failed to get image URL");
+
+      // Save to profile
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({ avatar_url: urlData.publicUrl })
+        .eq("id", user.id);
+
+      if (updateError) throw new Error("Failed to save: " + updateError.message);
+
+      // Update state with real URL + cache buster
+      const finalUrl = `${urlData.publicUrl}?t=${Date.now()}`;
+      setProfileImage(finalUrl);
+      setProfile(prev => ({ ...prev, avatar_url: urlData.publicUrl }));
+      showToast("Profile photo updated! ✅");
+    } catch (err) {
+      console.error("Avatar upload error:", err.message);
+      // Revert to old image on failure
+      setProfileImage(profile.avatar_url || null);
+      showToast(err.message || "Upload failed. Try again.", "error");
+    } finally {
+      setUploading(false);
+      // Free memory
+      URL.revokeObjectURL(localUrl);
+    }
+  };
+
+  const openEdit = () => {
+    setFormData({
+      full_name: profile.full_name || "",
+      country: profile.country || "",
+      bio: profile.bio || "",
+    });
+    setEditOpen(true);
+  };
 
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
   const saveProfile = async () => {
+    if (!formData.full_name?.trim()) {
+      showToast("Name is required", "warning");
+      return;
+    }
     setSaving(true);
     try {
       const { error } = await supabase
         .from("profiles")
-        .update({ full_name: formData.full_name, country: formData.country || null, bio: formData.bio || null })
+        .update({
+          full_name: formData.full_name.trim(),
+          country: formData.country?.trim() || null,
+          bio: formData.bio?.trim() || null,
+        })
         .eq("id", user.id);
       if (error) throw error;
-      setProfile(formData);
+      setProfile(prev => ({
+        ...prev,
+        full_name: formData.full_name.trim(),
+        country: formData.country?.trim() || null,
+        bio: formData.bio?.trim() || null,
+      }));
       setEditOpen(false);
       showToast("Profile saved!");
     } catch (err) {
@@ -174,21 +242,37 @@ export default function BuyerProfile() {
     }
   };
 
+  // Pull to refresh
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
     let startY = 0, currentY = 0, isPulling = false;
-    const handleTouchStart = (e) => { if (window.scrollY === 0) { startY = e.touches[0].clientY; isPulling = true; } };
-    const handleTouchMove = (e) => { if (!isPulling) return; currentY = e.touches[0].clientY; container.style.transform = `translateY(${Math.min(Math.max(0, currentY - startY) * 0.55, 85)}px)`; };
-    const handleTouchEnd = () => { if (!isPulling) return; const d = currentY - startY; isPulling = false; container.style.transition = "transform 420ms cubic-bezier(0.34,1.56,0.64,1)"; container.style.transform = "translateY(0)"; if (d > 115) fetchAll(true); setTimeout(() => { container.style.transition = ""; }, 450); };
-    container.addEventListener("touchstart", handleTouchStart, { passive: true });
-    container.addEventListener("touchmove", handleTouchMove, { passive: true });
-    container.addEventListener("touchend", handleTouchEnd);
-    return () => { container.removeEventListener("touchstart", handleTouchStart); container.removeEventListener("touchmove", handleTouchMove); container.removeEventListener("touchend", handleTouchEnd); };
+    const onStart = (e) => { if (window.scrollY === 0) { startY = e.touches[0].clientY; isPulling = true; } };
+    const onMove = (e) => { if (!isPulling) return; currentY = e.touches[0].clientY; container.style.transform = `translateY(${Math.min(Math.max(0, currentY - startY) * 0.55, 85)}px)`; };
+    const onEnd = () => {
+      if (!isPulling) return;
+      const d = currentY - startY;
+      isPulling = false;
+      container.style.transition = "transform 420ms cubic-bezier(0.34,1.56,0.64,1)";
+      container.style.transform = "translateY(0)";
+      if (d > 115) fetchAll(true);
+      setTimeout(() => { container.style.transition = ""; }, 450);
+    };
+    container.addEventListener("touchstart", onStart, { passive: true });
+    container.addEventListener("touchmove", onMove, { passive: true });
+    container.addEventListener("touchend", onEnd);
+    return () => {
+      container.removeEventListener("touchstart", onStart);
+      container.removeEventListener("touchmove", onMove);
+      container.removeEventListener("touchend", onEnd);
+    };
   }, []);
 
-  const getStatusColor = (s) => s === "accepted" || s === "delivered" ? "text-green-400" : s === "rejected" ? "text-red-400" : "text-yellow-400";
-  const getStatusBg = (s) => s === "accepted" || s === "delivered" ? "bg-green-500/20 text-green-400" : s === "rejected" ? "bg-red-500/20 text-red-400" : "bg-yellow-500/20 text-yellow-400";
+  const getStatusBg = (s) =>
+    s === "accepted" || s === "delivered" ? "bg-green-500/20 text-green-400" :
+    s === "rejected" ? "bg-red-500/20 text-red-400" :
+    "bg-yellow-500/20 text-yellow-400";
+
   const formatDate = (d) => new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
   if (loading && !refreshing) return (
@@ -197,23 +281,42 @@ export default function BuyerProfile() {
       <div className="px-5 pt-8 pb-6 animate-pulse flex flex-col items-center">
         <div className="w-24 h-24 bg-zinc-800 rounded-full" />
         <div className="mt-4 h-6 w-48 bg-zinc-800 rounded-xl" />
+        <div className="mt-2 h-4 w-32 bg-zinc-800 rounded-xl" />
       </div>
     </div>
   );
 
   return (
-     <div ref={containerRef} className="h-full overflow-y-auto bg-black text-white pb-28 overflow-x-hidden">
+    <div ref={containerRef} className="h-full overflow-y-auto bg-black text-white pb-28 overflow-x-hidden">
       <ToastUI />
+
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleAvatarChange}
+      />
 
       {/* HEADER */}
       <div className="sticky top-0 z-50 bg-black/95 backdrop-blur-lg border-b border-white/10 px-4 py-3 flex items-center justify-between">
         <div className="w-8" />
         <h1 className="font-semibold text-lg">My Profile</h1>
-        <button onClick={() => setMenuOpen(!menuOpen)} className="p-2 text-gray-400 hover:text-white active:scale-90 transition-transform">
-          <FaEllipsisV size={19} />
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Notifications bell */}
+          <button
+            onClick={() => navigate("/notifications")}
+            className="relative p-2 text-gray-400 hover:text-white transition"
+          >
+            <FaBell size={18} />
+          </button>
+          <button onClick={() => setMenuOpen(!menuOpen)} className="p-2 text-gray-400 hover:text-white active:scale-90 transition-transform">
+            <FaEllipsisV size={18} />
+          </button>
+        </div>
         {menuOpen && (
-          <div className="absolute right-4 top-14 bg-zinc-900 border border-white/10 rounded-2xl p-2 text-sm z-50 w-40 shadow-xl">
+          <div className="absolute right-4 top-14 bg-zinc-900 border border-white/10 rounded-2xl p-2 text-sm z-50 w-44 shadow-xl">
             <p className="p-3 hover:bg-white/10 rounded-xl cursor-pointer" onClick={() => { setMenuOpen(false); navigate("/settings"); }}>⚙️ Settings</p>
             <p className="p-3 hover:bg-white/10 rounded-xl cursor-pointer text-red-400" onClick={async () => { await logout(); navigate("/login"); }}>🚪 Logout</p>
           </div>
@@ -223,37 +326,67 @@ export default function BuyerProfile() {
       {/* PROFILE INFO */}
       <div className="px-5 pt-7 pb-5">
         <div className="flex flex-col items-center">
-          <div className="relative group">
-            <div className="w-24 h-24 rounded-full overflow-hidden border-4 border-green-600 shadow-lg shadow-green-500/20 transition-all group-hover:scale-105">
-              {profileImage ? (
-                <img src={profileImage} alt="Profile" className="w-full h-full object-cover" />
+
+          {/* Avatar */}
+          <div className="relative">
+            {/* Tap to view fullscreen */}
+            <div
+              className="w-24 h-24 rounded-full overflow-hidden border-4 border-green-600 shadow-lg shadow-green-500/20 cursor-pointer active:scale-95 transition-transform"
+              onClick={() => (profileImage || profile.avatar_url) && setViewingProfileImage(true)}
+            >
+              {uploading ? (
+                <div className="w-full h-full bg-zinc-800 flex items-center justify-center">
+                  <div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : (profileImage || profile.avatar_url) ? (
+                <img
+                  src={profileImage || profile.avatar_url}
+                  alt="Profile"
+                  className="w-full h-full object-cover"
+                  onError={() => setProfileImage(null)}
+                />
               ) : (
                 <div className="w-full h-full bg-gradient-to-br from-green-600 to-emerald-700 flex items-center justify-center text-4xl font-bold">
-                  {profile.full_name?.[0] || "U"}
+                  {profile.full_name?.[0]?.toUpperCase() || "U"}
                 </div>
               )}
             </div>
-            <label className="absolute -bottom-1 -right-1 bg-green-600 hover:bg-green-700 p-2.5 rounded-2xl cursor-pointer shadow-md active:scale-90 transition-all">
+
+            {/* Upload button */}
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="absolute -bottom-1 -right-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 p-2.5 rounded-2xl cursor-pointer shadow-md active:scale-90 transition-all"
+            >
               <FaPlus size={12} />
-              <input type="file" accept="image/*" className="hidden" onChange={changeProfile} />
-            </label>
+            </button>
           </div>
 
           <h2 className="mt-4 text-xl font-bold tracking-tight">{profile.full_name || "Your Name"}</h2>
           {profile.country && <p className="text-emerald-400 text-xs mt-0.5">📍 {profile.country}</p>}
-          {profile.bio && <p className="mt-3 text-center text-gray-400 text-xs leading-relaxed max-w-[260px]">{profile.bio}</p>}
+          {profile.bio && (
+            <p className="mt-3 text-center text-gray-400 text-xs leading-relaxed max-w-[260px]">{profile.bio}</p>
+          )}
 
+          {/* Stats */}
           <div className="flex gap-8 mt-7 text-center">
-            {[{ value: orders.length, label: "Orders" }, { value: bookings.length, label: "Bookings" }, { value: savedReels.length, label: "Saved" }].map((stat, i) => (
+            {[
+              { value: orders.length, label: "Orders" },
+              { value: bookings.length, label: "Bookings" },
+              { value: savedReels.length, label: "Saved" },
+            ].map((stat, i) => (
               <div key={i}>
                 <div className="text-xl font-bold tracking-tighter">{stat.value}</div>
-                <div className="text-[10px] text-gray-500 mt-0.5 tracking-widest">{stat.label}</div>
+                <div className="text-[10px] text-gray-500 mt-0.5 tracking-widest uppercase">{stat.label}</div>
               </div>
             ))}
           </div>
 
-          <button onClick={() => setEditOpen(true)} className="mt-6 bg-green-600 hover:bg-green-700 px-5 py-2.5 rounded-2xl flex items-center gap-2 text-xs font-semibold active:scale-[0.96] transition-all">
-            <FaUserEdit size={14} /> Edit Profile
+          <button
+            onClick={openEdit}
+            className="mt-6 bg-green-600 hover:bg-green-700 px-5 py-2.5 rounded-2xl flex items-center gap-2 text-xs font-semibold active:scale-[0.96] transition-all"
+          >
+            <FaUserEdit size={13} /> Edit Profile
           </button>
         </div>
       </div>
@@ -261,90 +394,146 @@ export default function BuyerProfile() {
       {/* TABS */}
       <div className="border-b border-white/10 sticky top-[57px] bg-black z-40">
         <div className="flex px-4">
-          {[{ id: "orders", icon: <FaBox size={13} />, label: "Orders" }, { id: "bookings", icon: <FaShoppingBag size={13} />, label: "Bookings" }, { id: "saved", icon: <FaBookmark size={13} />, label: "Saved" }].map((tab) => (
-            <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex-1 py-3 text-xs font-medium flex items-center justify-center gap-1 relative transition-all duration-200 ${activeTab === tab.id ? "text-white" : "text-gray-500"}`}>
+          {[
+            { id: "orders", icon: <FaBox size={12} />, label: "Orders" },
+            { id: "bookings", icon: <FaShoppingBag size={12} />, label: "Bookings" },
+            { id: "saved", icon: <FaBookmark size={12} />, label: "Saved" },
+          ].map((tab) => (
+            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+              className={`flex-1 py-3 text-xs font-medium flex items-center justify-center gap-1.5 relative transition-all ${
+                activeTab === tab.id ? "text-white" : "text-gray-500"
+              }`}
+            >
               {tab.icon}{tab.label}
-              {activeTab === tab.id && <div className="absolute bottom-0 left-1/2 h-0.5 w-8 -translate-x-1/2 bg-green-500 rounded" />}
+              {activeTab === tab.id && (
+                <div className="absolute bottom-0 left-1/2 h-0.5 w-8 -translate-x-1/2 bg-green-500 rounded" />
+              )}
             </button>
           ))}
         </div>
       </div>
 
       {/* CONTENT */}
-      <div className="p-4 pt-4">
+      <div className="p-4">
+
+        {/* ORDERS */}
         {activeTab === "orders" && (
           <div className="space-y-3">
             {orders.length === 0 ? (
-              <div className="text-center py-12">
+              <div className="text-center py-16">
                 <div className="text-5xl mb-3 opacity-30">📦</div>
-                <p className="text-gray-500 text-xs">No orders yet</p>
+                <p className="text-gray-500 text-sm">No orders yet</p>
+                <button onClick={() => navigate("/workspace")}
+                  className="mt-4 bg-green-600 px-5 py-2.5 rounded-2xl text-xs font-semibold active:scale-95">
+                  Browse Products
+                </button>
               </div>
-            ) : orders.map((o, i) => (
-              <div key={o.id} className="bg-zinc-900 border border-white/10 rounded-xl p-3.5 flex justify-between items-center hover:border-white/20 transition-all">
-                <div>
-                  <p className="font-medium text-sm truncate pr-2">{o.product_name}</p>
-                  <p className="text-[10px] text-gray-500">{formatDate(o.created_at)}</p>
+            ) : orders.map((o) => (
+              <div key={o.id} className="bg-zinc-900 border border-white/10 rounded-2xl p-3.5 flex items-center gap-3 hover:border-white/20 transition-all active:scale-[0.98] cursor-pointer"
+                onClick={() => navigate("/my-orders")}>
+                <div className="w-12 h-12 rounded-xl overflow-hidden bg-zinc-800 flex-shrink-0">
+                  {o.product_image_url
+                    ? <img src={o.product_image_url} alt={o.product_name} className="w-full h-full object-cover" />
+                    : <div className="w-full h-full flex items-center justify-center text-xl">📦</div>
+                  }
                 </div>
-                <div className="text-right">
-                  <p className={`text-xs font-medium ${getStatusColor(o.status)}`}>{o.status || "pending"}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">₦{Number(o.price || 0).toLocaleString()}</p>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-sm truncate">{o.product_name}</p>
+                  <p className="text-[10px] text-gray-500 mt-0.5">{formatDate(o.created_at)}</p>
+                  <p className="text-xs text-green-400 mt-0.5">
+                    ₦{Number(o.total_amount || o.price || 0).toLocaleString()}
+                  </p>
                 </div>
+                <span className={`text-[10px] px-2 py-1 rounded-full font-medium whitespace-nowrap ${getStatusBg(o.status)}`}>
+                  {o.status || "pending"}
+                </span>
               </div>
             ))}
+
+            {orders.length > 0 && (
+              <button onClick={() => navigate("/my-orders")}
+                className="w-full py-3 bg-white/5 hover:bg-white/10 rounded-2xl text-xs text-gray-400 transition">
+                View All Orders →
+              </button>
+            )}
           </div>
         )}
 
+        {/* BOOKINGS */}
         {activeTab === "bookings" && (
           <div className="space-y-3">
             {bookings.length === 0 ? (
-              <div className="text-center py-12">
+              <div className="text-center py-16">
                 <div className="text-5xl mb-3 opacity-30">📋</div>
-                <p className="text-gray-500 text-xs">No bookings yet</p>
-                <button onClick={() => navigate("/hire-worker")} className="mt-4 bg-green-600 px-5 py-2.5 rounded-2xl text-xs font-semibold active:scale-95">Hire a Worker</button>
+                <p className="text-gray-500 text-sm">No bookings yet</p>
+                <button onClick={() => navigate("/hire-worker")}
+                  className="mt-4 bg-green-600 px-5 py-2.5 rounded-2xl text-xs font-semibold active:scale-95">
+                  Hire a Worker
+                </button>
               </div>
             ) : bookings.map((b) => (
-              <div key={b.id} className="bg-zinc-900 border border-white/10 rounded-xl p-4 hover:border-white/20 transition-all">
-                <div className="flex justify-between">
-                  <div className="flex-1 pr-3">
+              <div key={b.id} className="bg-zinc-900 border border-white/10 rounded-2xl p-4 hover:border-white/20 transition-all">
+                <div className="flex justify-between items-start mb-2">
+                  <div className="flex-1 min-w-0 pr-3">
                     <p className="font-medium text-sm line-clamp-2">{b.job_description || "Job Request"}</p>
                     <p className="text-xs text-gray-500 mt-1">📍 {b.location}</p>
+                    <p className="text-xs text-gray-600 mt-0.5">{formatDate(b.created_at)}</p>
                   </div>
-                  <span className={`text-xs px-3 py-1 rounded-full self-start ${getStatusBg(b.status)}`}>{b.status || "pending"}</span>
+                  <span className={`text-[10px] px-2 py-1 rounded-full font-medium whitespace-nowrap ${getStatusBg(b.status)}`}>
+                    {b.status || "pending"}
+                  </span>
                 </div>
-                {b.worker_id && (
-                  <button onClick={() => navigate(`/seller-profile/${b.worker_id}`)} className="mt-3 text-xs text-blue-400 hover:text-blue-300">View Worker →</button>
-                )}
+                <div className="flex gap-2 mt-2">
+                  {b.worker_id && (
+                    <button onClick={() => navigate(`/seller-profile/${b.worker_id}`)}
+                      className="flex-1 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-xs transition active:scale-95">
+                      View Worker →
+                    </button>
+                  )}
+                  {b.status === "accepted" && (
+                    <button onClick={() => navigate("/my-orders")}
+                      className="flex-1 py-2 bg-green-600/20 text-green-400 rounded-xl text-xs transition active:scale-95">
+                      Track →
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
         )}
 
+        {/* SAVED REELS */}
         {activeTab === "saved" && (
           <>
             {savedLoading ? (
-              <div className="flex justify-center py-10">
-                <div className="w-6 h-6 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+              <div className="flex justify-center py-16">
+                <div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
               </div>
             ) : savedReels.length === 0 ? (
-              <div className="text-center py-12 text-gray-400">
-                <FaBookmark size={36} className="mx-auto mb-3 opacity-30" />
-                <p className="text-xs">No saved reels</p>
-                <button onClick={() => navigate("/reels")} className="mt-5 bg-green-600 px-5 py-2.5 rounded-2xl text-xs font-semibold">Browse Reels</button>
+              <div className="text-center py-16 text-gray-400">
+                <FaBookmark size={40} className="mx-auto mb-3 opacity-20" />
+                <p className="text-sm">No saved reels</p>
+                <button onClick={() => navigate("/reels")}
+                  className="mt-5 bg-green-600 px-5 py-2.5 rounded-2xl text-xs font-semibold active:scale-95">
+                  Browse Reels
+                </button>
               </div>
             ) : (
               <div className="grid grid-cols-3 gap-2">
                 {savedReels.map((reel) => (
                   <div key={reel.id} className="relative aspect-square bg-zinc-900 rounded-xl overflow-hidden ring-1 ring-white/5 hover:ring-green-500/30 hover:scale-[1.02] transition-all active:scale-95">
-                    <video src={reel.video_url} className="w-full h-full object-cover" muted onClick={() => setActiveReel(reel)} />
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/20" onClick={() => setActiveReel(reel)}>
+                    <video src={reel.video_url} className="w-full h-full object-cover" muted />
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/20 cursor-pointer" onClick={() => setActiveReel(reel)}>
                       <div className="w-7 h-7 bg-black/60 rounded-full flex items-center justify-center">
                         <FaPlay size={9} className="text-white ml-0.5" />
                       </div>
                     </div>
-                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 p-1.5 cursor-pointer" onClick={() => navigate(`/seller-profile/${reel.user_id}`)}>
+                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 p-1.5 cursor-pointer"
+                      onClick={() => navigate(`/seller-profile/${reel.user_id}`)}>
                       <p className="text-[10px] text-white truncate">@{reel.profiles?.full_name || "Worker"}</p>
                     </div>
-                    <button onClick={() => unsaveReel(reel.id)} className="absolute top-1.5 right-1.5 bg-black/70 p-1 rounded-lg z-10">
+                    <button onClick={() => unsaveReel(reel.id)}
+                      className="absolute top-1.5 right-1.5 bg-black/70 p-1.5 rounded-lg z-10 active:scale-90">
                       <FaBookmark size={10} className="text-yellow-400" />
                     </button>
                   </div>
@@ -355,6 +544,7 @@ export default function BuyerProfile() {
         )}
       </div>
 
+      {/* Refreshing indicator */}
       {refreshing && (
         <div className="fixed top-16 left-1/2 -translate-x-1/2 bg-zinc-900 border border-green-500/30 text-green-400 px-5 py-2.5 rounded-2xl shadow-xl flex items-center gap-2 text-xs z-50">
           <div className="w-4 h-4 border-2 border-green-400 border-t-transparent rounded-full animate-spin" />
@@ -364,18 +554,61 @@ export default function BuyerProfile() {
 
       {/* EDIT MODAL */}
       {editOpen && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-          <div className="bg-zinc-900 border border-white/10 p-5 rounded-2xl w-full max-w-sm">
-            <h2 className="font-bold mb-4">Edit Profile</h2>
-            <input type="text" name="full_name" value={formData.full_name || ""} onChange={handleChange} placeholder="Full Name" className="w-full p-3 mb-3 rounded-xl bg-white/10 text-sm outline-none" />
-            <input type="text" name="country" value={formData.country || ""} onChange={handleChange} placeholder="Country" className="w-full p-3 mb-3 rounded-xl bg-white/10 text-sm outline-none" />
-            <textarea name="bio" value={formData.bio || ""} onChange={handleChange} placeholder="Bio" rows={2} className="w-full p-3 mb-4 rounded-xl bg-white/10 text-sm outline-none" />
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={() => setEditOpen(false)}>
+          <div className="bg-zinc-900 border border-white/10 p-5 rounded-2xl w-full max-w-sm" onClick={e => e.stopPropagation()}>
+            <h2 className="font-bold mb-1 text-base">Edit Profile</h2>
+            <p className="text-xs text-gray-500 mb-4">Update your personal information</p>
+
+            <label className="text-xs text-gray-400 mb-1 block">Full Name *</label>
+            <input type="text" name="full_name" value={formData.full_name}
+              onChange={handleChange} placeholder="Your full name"
+              className="w-full p-3 mb-3 rounded-xl bg-white/10 text-sm outline-none focus:ring-1 focus:ring-green-500 transition" />
+
+            <label className="text-xs text-gray-400 mb-1 block">Country</label>
+            <input type="text" name="country" value={formData.country}
+              onChange={handleChange} placeholder="e.g. Nigeria"
+              className="w-full p-3 mb-3 rounded-xl bg-white/10 text-sm outline-none focus:ring-1 focus:ring-green-500 transition" />
+
+            <label className="text-xs text-gray-400 mb-1 block">Bio</label>
+            <textarea name="bio" value={formData.bio}
+              onChange={handleChange} placeholder="Tell workers about yourself..."
+              rows={3} className="w-full p-3 mb-4 rounded-xl bg-white/10 text-sm outline-none focus:ring-1 focus:ring-green-500 transition resize-none" />
+
             <div className="flex gap-3">
-              <button onClick={() => setEditOpen(false)} className="flex-1 py-3 rounded-xl bg-white/10 text-sm">Cancel</button>
-              <button onClick={saveProfile} disabled={saving} className="flex-1 py-3 rounded-xl bg-green-600 disabled:bg-gray-600 text-sm font-semibold">
-                {saving ? "Saving..." : "Save"}
+              <button onClick={() => setEditOpen(false)}
+                className="flex-1 py-3 rounded-xl bg-white/10 text-sm hover:bg-white/20 transition">
+                Cancel
+              </button>
+              <button onClick={saveProfile} disabled={saving || !formData.full_name?.trim()}
+                className="flex-1 py-3 rounded-xl bg-green-600 disabled:bg-gray-600 text-sm font-semibold transition">
+                {saving ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Saving...
+                  </span>
+                ) : "Save Changes"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* PROFILE IMAGE VIEWER */}
+      {viewingProfileImage && (
+        <div className="fixed inset-0 bg-black/95 z-[80] flex items-center justify-center p-6"
+          onClick={() => setViewingProfileImage(false)}>
+          <button className="absolute top-12 right-4 w-10 h-10 bg-white/10 rounded-full flex items-center justify-center text-white z-10"
+            onClick={() => setViewingProfileImage(false)}>
+            ✕
+          </button>
+          <div className="max-w-sm w-full" onClick={e => e.stopPropagation()}>
+            <img
+              src={profileImage || profile.avatar_url}
+              alt={profile.full_name}
+              className="w-full aspect-square object-cover rounded-3xl shadow-2xl border-4 border-green-600/40"
+            />
+            <p className="text-center text-white font-bold mt-4 text-lg">{profile.full_name}</p>
+            {profile.country && <p className="text-center text-emerald-400 text-sm mt-1">📍 {profile.country}</p>}
           </div>
         </div>
       )}
@@ -386,25 +619,25 @@ export default function BuyerProfile() {
           <div className="flex items-center justify-between p-4 pt-12">
             <button onClick={() => navigate(`/seller-profile/${activeReel.user_id}`)} className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-full overflow-hidden border border-green-500">
-                {activeReel.profiles?.avatar_url ? (
-                  <img src={activeReel.profiles.avatar_url} alt="" className="object-cover w-full h-full" />
-                ) : (
-                  <div className="w-full h-full bg-zinc-700 flex items-center justify-center text-xs font-bold">
-                    {activeReel.profiles?.full_name?.[0] || "W"}
-                  </div>
-                )}
+                {activeReel.profiles?.avatar_url
+                  ? <img src={activeReel.profiles.avatar_url} alt="" className="object-cover w-full h-full" />
+                  : <div className="w-full h-full bg-zinc-700 flex items-center justify-center text-xs font-bold">{activeReel.profiles?.full_name?.[0] || "W"}</div>
+                }
               </div>
               <p className="text-sm font-medium">@{activeReel.profiles?.full_name}</p>
             </button>
-            <button onClick={() => setActiveReel(null)} className="p-2"><FaTimes size={20} /></button>
+            <button onClick={() => setActiveReel(null)} className="p-2 active:scale-90"><FaTimes size={20} /></button>
           </div>
           <div className="flex-1 relative bg-black">
-            <video ref={videoRef} src={activeReel.video_url} autoPlay loop playsInline className="w-full h-full object-contain" />
-            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black p-5">
+            <video ref={videoRef} src={activeReel.video_url} autoPlay loop playsInline
+              className="w-full h-full object-contain" />
+            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black p-5 pb-8">
               {activeReel.description && <p className="text-sm text-gray-300 mb-4">{activeReel.description}</p>}
               <div className="flex gap-3">
-                <button onClick={() => navigate(`/seller-profile/${activeReel.user_id}`)} className="flex-1 bg-white/20 py-3 rounded-2xl text-sm font-medium">View Profile</button>
-                <button onClick={() => unsaveReel(activeReel.id)} className="flex-1 bg-yellow-600/20 text-yellow-400 py-3 rounded-2xl text-sm font-medium">Unsave</button>
+                <button onClick={() => { setActiveReel(null); navigate(`/seller-profile/${activeReel.user_id}`); }}
+                  className="flex-1 bg-white/20 py-3 rounded-2xl text-sm font-medium">View Profile</button>
+                <button onClick={() => unsaveReel(activeReel.id)}
+                  className="flex-1 bg-yellow-600/20 text-yellow-400 py-3 rounded-2xl text-sm font-medium">Unsave</button>
               </div>
             </div>
           </div>

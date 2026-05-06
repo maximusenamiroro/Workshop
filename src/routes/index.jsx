@@ -3,13 +3,11 @@ import { lazy, Suspense } from "react";
 import { useAuth } from "../context/AuthContext";
 import MainLayout from "../layouts/MainLayout";
 
-// Eagerly load auth pages only
 import Login from "../pages/auth/Login";
 import Signup from "../pages/auth/Register";
 import ResetPassword from "../pages/auth/resetpassword";
 import Landing from "../pages/Landing";
 
-// Lazy load everything else
 const ReelsPage = lazy(() => import("../pages/reels/ReelsPage"));
 const Workspace = lazy(() => import("../pages/Buyerworkspace"));
 const Workstation = lazy(() => import("../pages/SellerWorkstation"));
@@ -33,6 +31,8 @@ const LiveService = lazy(() => import("../pages/workstation/LiveService"));
 const LiveServices = lazy(() => import("../pages/workspace/LiveService"));
 const Sellersetting = lazy(() => import("../pages/settings/sellersSetting"));
 const Settings = lazy(() => import("../pages/settings/Settings"));
+const NotificationsPage = lazy(() => import("../pages/workspace/NotificationsPage"));
+const AdminDashboard = lazy(() => import("../pages/AdminDashboard"));
 
 const PageLoader = () => (
   <div className="h-screen bg-black flex items-center justify-center">
@@ -42,17 +42,9 @@ const PageLoader = () => (
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { user, role, loading } = useAuth();
-
-  if (loading || (user && allowedRoles && !role)) {
-    return <PageLoader />;
-  }
-
+  if (loading || (user && allowedRoles && !role)) return <PageLoader />;
   if (!user) return <Navigate to="/login" replace />;
-
-  if (allowedRoles && !allowedRoles.includes(role)) {
-    return <Navigate to="/reels" replace />;
-  }
-
+  if (allowedRoles && !allowedRoles.includes(role)) return <Navigate to="/reels" replace />;
   return children;
 };
 
@@ -74,10 +66,16 @@ export default function AppRoutes() {
           <Route path="/signup" element={<PublicRoute><Signup /></PublicRoute>} />
           <Route path="/reset-password" element={<ResetPassword />} />
 
+          {/* Admin — completely separate, no layout */}
+          <Route path="/admin-omo-2026" element={<AdminDashboard />} />
+
           {/* Reels */}
           <Route path="/reels" element={<ProtectedRoute><MainLayout><ReelsPage /></MainLayout></ProtectedRoute>} />
           <Route path="/saved-reels" element={<ProtectedRoute allowedRoles={["client"]}><MainLayout><SavedReels /></MainLayout></ProtectedRoute>} />
           <Route path="/create-reel" element={<ProtectedRoute allowedRoles={["worker"]}><MainLayout><CreateReel /></MainLayout></ProtectedRoute>} />
+
+          {/* Notifications — both roles */}
+          <Route path="/notifications" element={<ProtectedRoute><MainLayout><NotificationsPage /></MainLayout></ProtectedRoute>} />
 
           {/* Client */}
           <Route path="/workspace" element={<ProtectedRoute allowedRoles={["client"]}><MainLayout><Workspace /></MainLayout></ProtectedRoute>} />
