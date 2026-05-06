@@ -624,7 +624,7 @@ export default function SellerProfile() {
                 </div>
               ))}
             </div>
-            {/* Row 2 — followers, profile views */}
+            {/* Row 2 — followers, profile views
             <div className="grid grid-cols-2 gap-2">
               {totalStats.slice(3).map((s, i) => (
                 <div key={i} className="bg-zinc-900 border border-white/5 rounded-2xl p-3 text-center">
@@ -632,7 +632,7 @@ export default function SellerProfile() {
                   <div className="text-[10px] text-gray-500 mt-0.5 uppercase tracking-wide">{s.label}</div>
                 </div>
               ))}
-            </div>
+            </div> */}
           </div>
 
           {/* Action buttons */}
