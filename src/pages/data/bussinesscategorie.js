@@ -100,6 +100,7 @@ export const businessCategories = {
     "Electronics Shop",
     "Phone Shop",
     "Clothing Store",
+    "Fabric Store",
     "Furniture Shop",
     "Cosmetic Shop",
     "Hardware Store",
