@@ -514,9 +514,8 @@ export default function SellerProfile() {
   const totalStats = [
     { value: formatCount(reels.length), label: "Reels" },
     { value: formatCount(totalLikes), label: "Likes", icon: <FaHeart size={9} className="text-red-400 mr-0.5 inline" /> },
-    { value: formatCount(totalReelViews), label: "Reel Views", icon: <FaEye size={9} className="text-blue-400 mr-0.5 inline" /> },
     { value: formatCount(followerCount), label: "Followers" },
-    { value: formatCount(profileViews), label: "Profile Views", icon: <FaEye size={9} className="text-purple-400 mr-0.5 inline" /> },
+   
   ];
 
   return (
@@ -624,15 +623,6 @@ export default function SellerProfile() {
                 </div>
               ))}
             </div>
-            {/* Row 2 — followers, profile views
-            <div className="grid grid-cols-2 gap-2">
-              {totalStats.slice(3).map((s, i) => (
-                <div key={i} className="bg-zinc-900 border border-white/5 rounded-2xl p-3 text-center">
-                  <div className="text-lg font-bold">{s.icon}{s.value}</div>
-                  <div className="text-[10px] text-gray-500 mt-0.5 uppercase tracking-wide">{s.label}</div>
-                </div>
-              ))}
-            </div> */}
           </div>
 
           {/* Action buttons */}
