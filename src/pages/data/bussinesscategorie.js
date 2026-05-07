@@ -1,5 +1,4 @@
 // Global business categories for omoworkit platform
-
 export const businessCategories = {
   "Handwork & Skilled Workers": [
     "Carpenter",
@@ -26,7 +25,6 @@ export const businessCategories = {
     "Glass Worker",
     "Iron Bender"
   ],
-
   "Food & Restaurant": [
     "Restaurant",
     "Fast Food",
@@ -43,7 +41,6 @@ export const businessCategories = {
     "Seafood Restaurant",
     "Ice Cream Shop"
   ],
-
   "Hotel & Accommodation": [
     "Hotel",
     "Lodge",
@@ -54,7 +51,6 @@ export const businessCategories = {
     "Hostel",
     "Vacation Home"
   ],
-
   "Transport & Logistics": [
     "Taxi",
     "Car Hire",
@@ -67,7 +63,6 @@ export const businessCategories = {
     "Airport Pickup",
     "Towing Service"
   ],
-
   "Beauty & Fashion": [
     "Salon",
     "Makeup Artist",
@@ -80,7 +75,6 @@ export const businessCategories = {
     "Beauty Supply",
     "Tattoo Studio"
   ],
-
   "Health & Medical": [
     "Pharmacy",
     "Clinic",
@@ -93,7 +87,6 @@ export const businessCategories = {
     "Physiotherapy",
     "Herbal Center"
   ],
-
   "Retail & Shops": [
     "Supermarket",
     "Grocery Store",
@@ -108,7 +101,6 @@ export const businessCategories = {
     "Stationery Shop",
     "Gift Shop"
   ],
-
   "Construction & Real Estate": [
     "Construction Company",
     "Building Contractor",
@@ -120,7 +112,6 @@ export const businessCategories = {
     "Civil Engineer",
     "Surveyor"
   ],
-
   "Media & Event Services": [
     "Photographer",
     "Videographer",
@@ -132,7 +123,6 @@ export const businessCategories = {
     "Live Streamer",
     "Music Studio"
   ],
-
   "Technology & IT": [
     "Software Developer",
     "Web Developer",
@@ -143,7 +133,6 @@ export const businessCategories = {
     "Internet Provider",
     "Computer Store"
   ],
-
   "Home & Personal Services": [
     "Laundry",
     "Dry Cleaning",
@@ -155,7 +144,6 @@ export const businessCategories = {
     "Home Chef",
     "Housekeeping"
   ],
-
   "Agriculture & Farming": [
     "Poultry",
     "Fish Farm",
@@ -166,7 +154,52 @@ export const businessCategories = {
     "Vegetable Farming",
     "Rice Farming"
   ],
-
+  "Marine & Offshore Services": [
+    "Marine Engineer",
+    "Marine Consultant",
+    "Marine Navigator",
+    "Naval Architect",
+    "Offshore Engineer",
+    "Marine Surveyor",
+    "Port & Shipping Agent",
+    "Boat Builder & Repairer",
+    "Diving & Underwater Services",
+    "Oil & Gas Marine Services",
+    "Marine Safety Officer",
+    "Vessel Captain / Pilot",
+    "Fisheries Consultant",
+    "Waterway Transport Operator",
+    "Marine Equipment Supplier"
+  ],
+  "Professional & Consulting Services": [
+    "Lawyer",
+    "Accountant",
+    "Financial Advisor",
+    "Business Consultant",
+    "HR Consultant",
+    "Tax Consultant",
+    "Insurance Broker",
+    "Project Manager",
+    "Supply Chain Consultant",
+    "Procurement Consultant",
+    "Environmental Consultant",
+    "Safety & HSE Consultant",
+    "Training & Coaching",
+    "Research & Data Analyst",
+    "Management Consultant"
+  ],
+  "Education & Training": [
+    "Lesson Teacher / Tutor",
+    "Vocational Trainer",
+    "Online Instructor",
+    "School",
+    "Driving School",
+    "Skill Acquisition Center",
+    "Language Tutor",
+    "Music Teacher",
+    "Life Coach",
+    "Exam Preparation"
+  ],
   "General Business": [
     "Wholesale",
     "Distributor",
@@ -177,7 +210,6 @@ export const businessCategories = {
     "Market Seller",
     "E-commerce Seller"
   ],
-
   "Other Business": [
     "Other"
   ]
