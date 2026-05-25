@@ -305,12 +305,7 @@ export default function BuyerProfile() {
         <h1 className="font-semibold text-lg">My Profile</h1>
         <div className="flex items-center gap-2">
           {/* Notifications bell */}
-          <button
-            onClick={() => navigate("/notifications")}
-            className="relative p-2 text-gray-400 hover:text-white transition"
-          >
-            <FaBell size={18} />
-          </button>
+         
           <button onClick={() => setMenuOpen(!menuOpen)} className="p-2 text-gray-400 hover:text-white active:scale-90 transition-transform">
             <FaEllipsisV size={18} />
           </button>

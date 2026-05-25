@@ -10,16 +10,16 @@ import { useToast } from "../hooks/useToast";
 
 const BOOKING_STATUS_COLOR = {
   accepted: "bg-green-500/20 text-green-400",
-  rejected: "bg-red-500/20 text-red-400",
-  pending: "bg-yellow-500/20 text-yellow-400",
+  rejected:  "bg-red-500/20 text-red-400",
+  pending:   "bg-yellow-500/20 text-yellow-400",
 };
 
 const ORDER_STATUS_COLOR = {
-  pending: "bg-yellow-500/20 text-yellow-400",
-  shipping: "bg-blue-500/20 text-blue-400",
+  pending:      "bg-yellow-500/20 text-yellow-400",
+  shipping:     "bg-blue-500/20 text-blue-400",
   "on the way": "bg-blue-500/20 text-blue-400",
-  arriving: "bg-purple-500/20 text-purple-400",
-  delivered: "bg-green-500/20 text-green-400",
+  arriving:     "bg-purple-500/20 text-purple-400",
+  delivered:    "bg-green-500/20 text-green-400",
 };
 
 const ORDER_STATUS_STEPS = ["shipping", "on the way", "arriving", "delivered"];
@@ -33,54 +33,101 @@ const formatDate = (dateStr) =>
 export default function SellerWorkstation() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const geoWatchRef = useRef(null);
-  const channelsRef = useRef([]);
+  const geoWatchRef        = useRef(null);
+  const channelsRef        = useRef([]);
   const workerProductIdsRef = useRef([]);
-  const trackingWatchRefs = useRef({});
+  const trackingWatchRefs  = useRef({});
+  const initDoneRef        = useRef(false); // prevent double-init in React StrictMode
   const { showToast, ToastUI } = useToast();
 
-  const [products, setProducts] = useState([]);
-  const [bookings, setBookings] = useState([]);
+  const [products, setProducts]           = useState([]);
+  const [bookings, setBookings]           = useState([]);
   const [productOrders, setProductOrders] = useState([]);
-  const [productViews, setProductViews] = useState({});
-  const [loading, setLoading] = useState(true);
-  const [isLive, setIsLive] = useState(false);
-  const [service, setService] = useState("");
-  const [liveLoading, setLiveLoading] = useState(false);
+  const [productViews, setProductViews]   = useState({});
+  const [loading, setLoading]             = useState(true);
+  const [isLive, setIsLive]               = useState(false);
+  const [service, setService]             = useState("");
+  const [liveLoading, setLiveLoading]     = useState(false);
   const [workerCategory, setWorkerCategory] = useState(null);
-  const [showUpload, setShowUpload] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [newOrderIds, setNewOrderIds] = useState(new Set());
+  const [showUpload, setShowUpload]       = useState(false);
+  const [uploading, setUploading]         = useState(false);
+  const [newOrderIds, setNewOrderIds]     = useState(new Set());
   const [trackingSessions, setTrackingSessions] = useState({});
-  const [trackingLoading, setTrackingLoading] = useState({});
+  const [trackingLoading, setTrackingLoading]   = useState({});
 
   const [form, setForm] = useState({
     title: "", description: "", price: "", file: null,
   });
 
-  // Cleanup on unmount
+  // ── Cleanup on unmount ──────────────────────────────────────
   useEffect(() => {
     return () => {
-      if (geoWatchRef.current) navigator.geolocation.clearWatch(geoWatchRef.current);
-      Object.values(trackingWatchRefs.current).forEach(id => navigator.geolocation.clearWatch(id));
+      stopAllGPS();
       channelsRef.current.forEach(ch => supabase.removeChannel(ch));
       channelsRef.current = [];
     };
   }, []);
 
+  // ── Init — runs once ────────────────────────────────────────
   useEffect(() => {
     if (!user) return;
-    const init = async () => {
+    if (initDoneRef.current) return;
+    initDoneRef.current = true;
+
+    (async () => {
+      // Always clean duplicates first before anything else
+      await nukeDuplicates();
       await fetchAll();
       setupRealtime();
-    };
-    init();
+    })();
   }, [user]);
 
+  // ── Stop all GPS helpers ────────────────────────────────────
+  const stopAllGPS = () => {
+    if (geoWatchRef.current) {
+      navigator.geolocation.clearWatch(geoWatchRef.current);
+      geoWatchRef.current = null;
+    }
+    Object.values(trackingWatchRefs.current).forEach(id =>
+      navigator.geolocation.clearWatch(id)
+    );
+    trackingWatchRefs.current = {};
+  };
+
+  // ── CORE FIX: nuke every row for this worker then let DB sort it ──
+  // This runs on every page load so stale/duplicate rows are always cleaned
+  const nukeDuplicates = async () => {
+    if (!user) return;
+    try {
+      const { data, error } = await supabase
+        .from("live_workers")
+        .select("id, updated_at")
+        .eq("worker_id", user.id)
+        .order("updated_at", { ascending: false });
+
+      if (error) { console.error("nukeDuplicates select error:", error.message); return; }
+      if (!data || data.length <= 1) return; // 0 or 1 row — nothing to clean
+
+      // Keep only the newest row, delete the rest
+      const toDelete = data.slice(1).map(r => r.id);
+      const { error: delError } = await supabase
+        .from("live_workers")
+        .delete()
+        .in("id", toDelete);
+
+      if (delError) console.error("nukeDuplicates delete error:", delError.message);
+      else console.log(`[live_workers] Removed ${toDelete.length} duplicate row(s)`);
+    } catch (err) {
+      console.error("nukeDuplicates error:", err.message);
+    }
+  };
+
+  // ── Realtime setup ──────────────────────────────────────────
   const setupRealtime = () => {
     channelsRef.current.forEach(ch => supabase.removeChannel(ch));
     channelsRef.current = [];
 
+    // Bookings channel
     const bookingsChannel = supabase
       .channel(`workstation_bookings_${user.id}`)
       .on("postgres_changes", {
@@ -105,6 +152,7 @@ export default function SellerWorkstation() {
       })
       .subscribe();
 
+    // Orders channel
     const ordersChannel = supabase
       .channel(`workstation_orders_${user.id}`)
       .on("postgres_changes", {
@@ -112,17 +160,16 @@ export default function SellerWorkstation() {
       }, async (payload) => {
         const newOrder = payload.new;
         if (!newOrder?.product_id) return;
-        const isMyProduct = workerProductIdsRef.current.includes(newOrder.product_id);
-        if (!isMyProduct) return;
+        if (!workerProductIdsRef.current.includes(newOrder.product_id)) return;
 
         const { data: buyer } = await supabase
           .from("profiles").select("full_name")
           .eq("id", newOrder.user_id).maybeSingle();
 
-        const enrichedOrder = { ...newOrder, buyer_name: buyer?.full_name || "Customer" };
+        const enriched = { ...newOrder, buyer_name: buyer?.full_name || "Customer" };
         setProductOrders(prev => {
           if (prev.find(o => o.id === newOrder.id)) return prev;
-          return [enrichedOrder, ...prev];
+          return [enriched, ...prev];
         });
         setNewOrderIds(prev => new Set([...prev, newOrder.id]));
         showToast(`🛍️ New order from ${buyer?.full_name || "a customer"}!`);
@@ -142,7 +189,7 @@ export default function SellerWorkstation() {
       })
       .subscribe();
 
-    // Track session updates from client side
+    // Tracking channel
     const trackingChannel = supabase
       .channel(`workstation_tracking_${user.id}`)
       .on("postgres_changes", {
@@ -151,11 +198,7 @@ export default function SellerWorkstation() {
         filter: `worker_id=eq.${user.id}`,
       }, (payload) => {
         const updated = payload.new;
-        setTrackingSessions(prev => ({
-          ...prev,
-          [updated.booking_id]: updated,
-        }));
-        // If client stopped tracking, clear our watch
+        setTrackingSessions(prev => ({ ...prev, [updated.booking_id]: updated }));
         if (!updated.is_active) {
           if (trackingWatchRefs.current[updated.booking_id]) {
             navigator.geolocation.clearWatch(trackingWatchRefs.current[updated.booking_id]);
@@ -169,6 +212,7 @@ export default function SellerWorkstation() {
     channelsRef.current = [bookingsChannel, ordersChannel, trackingChannel];
   };
 
+  // ── Fetch all data ──────────────────────────────────────────
   const fetchAll = async () => {
     if (!user) return;
     await Promise.all([
@@ -188,80 +232,204 @@ export default function SellerWorkstation() {
         .from("workers").select("category, category_group")
         .eq("id", user.id).maybeSingle();
       setWorkerCategory(data?.category || null);
-    } catch (err) { console.error("fetchWorkerCategory failed:", err.message); }
+    } catch (err) {
+      console.error("fetchWorkerCategory failed:", err.message);
+    }
   };
 
+  // ── KEY FIX: fetchLiveStatus checks for live status AND
+  //    restarts GPS watch if user is live but watch is dead ──
   const fetchLiveStatus = async () => {
     if (!user) return;
     try {
-      const { data } = await supabase
-        .from("live_workers").select("id, service")
-        .eq("worker_id", user.id).maybeSingle();
-      if (data) { setIsLive(true); setService(data.service || ""); }
-      else setIsLive(false);
-    } catch (err) { console.error("fetchLiveStatus failed:", err.message); }
+      const { data, error } = await supabase
+        .from("live_workers")
+        .select("id, service, lat, lng, updated_at")
+        .eq("worker_id", user.id)
+        .order("updated_at", { ascending: false });
+
+      if (error) throw error;
+
+      if (!data || data.length === 0) {
+        // Definitely not live — stop GPS just in case
+        if (geoWatchRef.current) {
+          navigator.geolocation.clearWatch(geoWatchRef.current);
+          geoWatchRef.current = null;
+        }
+        setIsLive(false);
+        setService("");
+        return;
+      }
+
+      // Extra safety: delete any extras if they snuck through
+      if (data.length > 1) {
+        const extras = data.slice(1).map(r => r.id);
+        await supabase.from("live_workers").delete().in("id", extras);
+      }
+
+      const liveRow = data[0];
+      setIsLive(true);
+      setService(liveRow.service || "");
+
+      // If live but GPS watch died (e.g. after re-login) — restart it silently
+      if (!geoWatchRef.current) {
+        console.log("[fetchLiveStatus] Live but no GPS watch — restarting");
+        startGPSWatch();
+      }
+    } catch (err) {
+      console.error("fetchLiveStatus failed:", err.message);
+    }
+  };
+
+  // ── GPS watch — separated so it can be called from multiple places ──
+  const startGPSWatch = () => {
+    // Always clear existing watch first
+    if (geoWatchRef.current) {
+      navigator.geolocation.clearWatch(geoWatchRef.current);
+      geoWatchRef.current = null;
+    }
+
+    if (!navigator.geolocation || !user) return;
+
+    geoWatchRef.current = navigator.geolocation.watchPosition(
+      async (pos) => {
+        try {
+          // Use UPDATE not upsert — row must already exist
+          await supabase
+            .from("live_workers")
+            .update({
+              lat: pos.coords.latitude,
+              lng: pos.coords.longitude,
+              last_seen: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            })
+            .eq("worker_id", user.id);
+        } catch (err) {
+          console.error("GPS update error:", err.message);
+        }
+      },
+      (err) => console.warn("GPS watch error:", err.message),
+      { enableHighAccuracy: false, maximumAge: 10000, timeout: 15000 }
+    );
   };
 
   const resolveCategory = (fallbackService = "") =>
     workerCategory?.trim() || fallbackService?.trim() || service?.trim() || "General Worker";
 
+  // ── TOGGLE LIVE: delete-then-insert pattern, never upsert ──
   const toggleLive = async () => {
     if (!user) return;
     setLiveLoading(true);
     try {
       const finalService = resolveCategory(service);
+
       if (isLive) {
-        if (geoWatchRef.current) { navigator.geolocation.clearWatch(geoWatchRef.current); geoWatchRef.current = null; }
-        await supabase.from("live_workers").delete().eq("worker_id", user.id);
+        // ── GO OFFLINE ──
+        // Stop GPS first
+        if (geoWatchRef.current) {
+          navigator.geolocation.clearWatch(geoWatchRef.current);
+          geoWatchRef.current = null;
+        }
+        // Hard delete ALL rows for this worker
+        const { error } = await supabase
+          .from("live_workers")
+          .delete()
+          .eq("worker_id", user.id);
+
+        if (error) throw error;
         setIsLive(false);
         setLiveLoading(false);
         showToast("You are now offline");
         return;
       }
-      if (!navigator.geolocation) { showToast("Location not supported.", "error"); setLiveLoading(false); return; }
+
+      // ── GO LIVE ──
+      if (!navigator.geolocation) {
+        showToast("Your device does not support location.", "error");
+        setLiveLoading(false);
+        return;
+      }
+
       if (navigator.permissions) {
         try {
           const perm = await navigator.permissions.query({ name: "geolocation" });
-          if (perm.state === "denied") { showToast("Location blocked. Enable in browser settings.", "error"); setLiveLoading(false); return; }
-        } catch (e) { /* continue */ }
+          if (perm.state === "denied") {
+            showToast("Location blocked. Enable in browser settings.", "error");
+            setLiveLoading(false);
+            return;
+          }
+        } catch (e) { /* browser doesn't support permissions API */ }
       }
+
       showToast("Getting your location...", "warning");
+
       navigator.geolocation.getCurrentPosition(
         async (pos) => {
           try {
-            const { error } = await supabase.from("live_workers").upsert({
-              worker_id: user.id, service: finalService,
-              lat: pos.coords.latitude, lng: pos.coords.longitude,
-              last_seen: new Date().toISOString(), updated_at: new Date().toISOString(),
-            });
-            if (error) throw error;
-            setIsLive(true); setService(finalService);
-            showToast("🟢 You are now live!");
-            geoWatchRef.current = navigator.geolocation.watchPosition(
-              async (position) => {
-                try {
-                  await supabase.from("live_workers").update({
-                    lat: position.coords.latitude, lng: position.coords.longitude,
+            // Step 1: Hard delete any existing rows (prevent duplicates)
+            await supabase
+              .from("live_workers")
+              .delete()
+              .eq("worker_id", user.id);
+
+            // Small delay to let delete propagate
+            await new Promise(r => setTimeout(r, 150));
+
+            // Step 2: Insert exactly one fresh row
+            const { error: insertError } = await supabase
+              .from("live_workers")
+              .insert({
+                worker_id: user.id,
+                service:   finalService,
+                lat:       pos.coords.latitude,
+                lng:       pos.coords.longitude,
+                last_seen: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              });
+
+            if (insertError) {
+              // If insert fails due to unique constraint race — fall back to update
+              if (insertError.code === "23505") {
+                await supabase
+                  .from("live_workers")
+                  .update({
+                    service:   finalService,
+                    lat:       pos.coords.latitude,
+                    lng:       pos.coords.longitude,
                     last_seen: new Date().toISOString(),
-                  }).eq("worker_id", user.id);
-                } catch (err) { console.error("GPS update error:", err.message); }
-              },
-              (err) => console.warn("GPS watch error:", err.message),
-              { enableHighAccuracy: false, maximumAge: 10000, timeout: 15000 }
-            );
-          } catch (err) { showToast("Failed to go live: " + err.message, "error"); }
-          finally { setLiveLoading(false); }
+                    updated_at: new Date().toISOString(),
+                  })
+                  .eq("worker_id", user.id);
+              } else {
+                throw insertError;
+              }
+            }
+
+            setIsLive(true);
+            setService(finalService);
+            showToast("🟢 You are now live!");
+
+            // Start GPS watch AFTER row is confirmed to exist
+            startGPSWatch();
+          } catch (err) {
+            showToast("Failed to go live: " + err.message, "error");
+          } finally {
+            setLiveLoading(false);
+          }
         },
         (err) => {
-          if (err.code === 1) showToast("Location access denied.", "error");
+          if (err.code === 1) showToast("Location access denied. Enable in browser settings.", "error");
           else if (err.code === 2) showToast("Could not get location. Turn on GPS.", "error");
-          else if (err.code === 3) showToast("Location timed out.", "error");
-          else showToast("Location error.", "error");
+          else if (err.code === 3) showToast("Location timed out. Try again.", "error");
+          else showToast("Location error. Try again.", "error");
           setLiveLoading(false);
         },
         { enableHighAccuracy: false, timeout: 12000, maximumAge: 0 }
       );
-    } catch (err) { showToast("Failed: " + err.message, "error"); setLiveLoading(false); }
+    } catch (err) {
+      showToast("Failed: " + err.message, "error");
+      setLiveLoading(false);
+    }
   };
 
   const fetchProducts = async () => {
@@ -275,7 +443,9 @@ export default function SellerWorkstation() {
         workerProductIdsRef.current = data.map(p => p.id);
         await fetchProductViews(data.map(p => p.id));
       }
-    } catch (err) { console.error("fetchProducts failed:", err.message); }
+    } catch (err) {
+      console.error("fetchProducts failed:", err.message);
+    }
   };
 
   const fetchProductViews = async (productIds) => {
@@ -284,9 +454,13 @@ export default function SellerWorkstation() {
         .from("product_views").select("product_id").in("product_id", productIds);
       if (error) throw error;
       const viewCounts = {};
-      (data || []).forEach(v => { viewCounts[v.product_id] = (viewCounts[v.product_id] || 0) + 1; });
+      (data || []).forEach(v => {
+        viewCounts[v.product_id] = (viewCounts[v.product_id] || 0) + 1;
+      });
       setProductViews(viewCounts);
-    } catch (err) { console.error("fetchProductViews failed:", err.message); }
+    } catch (err) {
+      console.error("fetchProductViews failed:", err.message);
+    }
   };
 
   const fetchProductOrders = async () => {
@@ -315,8 +489,12 @@ export default function SellerWorkstation() {
           .from("profiles").select("id, full_name").in("id", buyerIds);
         (buyersData || []).forEach(b => { buyerMap[b.id] = b.full_name; });
       }
-      setProductOrders(ordersData.map(o => ({ ...o, buyer_name: buyerMap[o.user_id] || "Customer" })));
-    } catch (err) { console.error("fetchProductOrders failed:", err.message); }
+      setProductOrders(ordersData.map(o => ({
+        ...o, buyer_name: buyerMap[o.user_id] || "Customer",
+      })));
+    } catch (err) {
+      console.error("fetchProductOrders failed:", err.message);
+    }
   };
 
   const fetchBookings = async () => {
@@ -330,24 +508,24 @@ export default function SellerWorkstation() {
         .limit(20);
       setBookings(data || []);
 
-      // Fetch tracking sessions for accepted bookings
       const accepted = (data || []).filter(b => b.status === "accepted");
       if (accepted.length > 0) {
         const { data: sessions } = await supabase
-          .from("tracking_sessions")
-          .select("*")
+          .from("tracking_sessions").select("*")
           .in("booking_id", accepted.map(b => b.id));
         const sessionMap = {};
         (sessions || []).forEach(s => { sessionMap[s.booking_id] = s; });
         setTrackingSessions(sessionMap);
       }
-    } catch (err) { console.error("fetchBookings failed:", err.message); }
+    } catch (err) {
+      console.error("fetchBookings failed:", err.message);
+    }
   };
 
   const updateOrderStatus = async (orderId, status) => {
     setProductOrders(prev => prev.map(o => o.id === orderId ? { ...o, status } : o));
     const { error } = await supabase.from("orders").update({ status }).eq("id", orderId);
-    if (error) { showToast("Failed to update: " + error.message, "error"); fetchProductOrders(); }
+    if (error) { showToast("Failed: " + error.message, "error"); fetchProductOrders(); }
     else showToast(`Order marked as "${status}"`);
   };
 
@@ -363,27 +541,34 @@ export default function SellerWorkstation() {
         if (sizeMB > 10) throw new Error("Image too large. Use under 10MB");
         const ext = form.file.name.split(".").pop().toLowerCase();
         const fileName = `${user.id}_${Date.now()}.${ext}`;
-        const { error: uploadError } = await supabase.storage
-          .from("products").upload(fileName, form.file, { cacheControl: "3600", upsert: false, contentType: form.file.type });
-        if (uploadError) throw new Error("Image upload failed: " + uploadError.message);
+        const { error: upErr } = await supabase.storage
+          .from("products").upload(fileName, form.file, {
+            cacheControl: "3600", upsert: false, contentType: form.file.type,
+          });
+        if (upErr) throw new Error("Image upload failed: " + upErr.message);
         const { data: urlData } = supabase.storage.from("products").getPublicUrl(fileName);
         imageUrl = urlData.publicUrl;
       }
       const finalCategory = resolveCategory(service);
       const { data: newProduct, error } = await supabase.from("products").insert({
-        worker_id: user.id, title: form.title,
+        worker_id:   user.id,
+        title:       form.title,
         description: form.description || "",
-        price: form.price ? parseFloat(form.price) : null,
-        category: finalCategory, image_url: imageUrl,
+        price:       form.price ? parseFloat(form.price) : null,
+        category:    finalCategory,
+        image_url:   imageUrl,
       }).select().single();
-      if (error) throw new Error("Failed to save product: " + error.message);
+      if (error) throw new Error("Failed to save: " + error.message);
       if (newProduct) workerProductIdsRef.current = [...workerProductIdsRef.current, newProduct.id];
       setForm({ title: "", description: "", price: "", file: null });
       setShowUpload(false);
       fetchProducts();
       showToast(`Product posted under "${finalCategory}"`);
-    } catch (err) { showToast(err.message, "error"); }
-    finally { setUploading(false); }
+    } catch (err) {
+      showToast(err.message, "error");
+    } finally {
+      setUploading(false);
+    }
   };
 
   const deleteProduct = async (product) => {
@@ -396,46 +581,45 @@ export default function SellerWorkstation() {
       setProducts(prev => prev.filter(p => p.id !== product.id));
       workerProductIdsRef.current = workerProductIdsRef.current.filter(id => id !== product.id);
       showToast("Product deleted");
-    } catch (err) { showToast("Failed to delete product", "error"); }
+    } catch (err) {
+      showToast("Failed to delete product", "error");
+    }
   };
 
   const updateBookingStatus = async (id, status) => {
     setBookings(prev => prev.map(b => b.id === id ? { ...b, status } : b));
     const { error } = await supabase.from("hire_requests").update({ status }).eq("id", id);
-    if (error) { showToast("Failed to update: " + error.message, "error"); fetchBookings(); }
+    if (error) { showToast("Failed: " + error.message, "error"); fetchBookings(); }
     else showToast(`Booking ${status}`);
   };
 
-  // ── TRACKING ──────────────────────────────────────────────
+  // ── PER-BOOKING TRACKING ────────────────────────────────────
   const startTracking = async (booking) => {
     if (!user) return;
     setTrackingLoading(prev => ({ ...prev, [booking.id]: true }));
     try {
-      if (navigator.permissions) {
-        try {
-          const perm = await navigator.permissions.query({ name: "geolocation" });
-          if (perm.state === "denied") { showToast("Location blocked. Enable GPS.", "error"); return; }
-        } catch (e) { /* continue */ }
-      }
       const pos = await new Promise((resolve, reject) =>
-        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: false, timeout: 12000 })
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: false, timeout: 12000,
+        })
       );
       const { data: session, error } = await supabase
         .from("tracking_sessions")
         .upsert({
           booking_id: booking.id,
-          worker_id: user.id,
-          client_id: booking.client_id,
+          worker_id:  user.id,
+          client_id:  booking.client_id,
           worker_lat: pos.coords.latitude,
           worker_lng: pos.coords.longitude,
-          is_active: true,
+          is_active:  true,
           started_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         }, { onConflict: "booking_id" })
         .select().single();
+
       if (error) throw error;
       setTrackingSessions(prev => ({ ...prev, [booking.id]: session }));
-      showToast("📍 Tracking started — client can see your location!");
+      showToast("📍 Tracking started!");
 
       const watchId = navigator.geolocation.watchPosition(
         async (position) => {
@@ -467,10 +651,15 @@ export default function SellerWorkstation() {
         navigator.geolocation.clearWatch(trackingWatchRefs.current[booking.id]);
         delete trackingWatchRefs.current[booking.id];
       }
-      setTrackingSessions(prev => ({ ...prev, [booking.id]: { ...prev[booking.id], is_active: false } }));
+      setTrackingSessions(prev => ({
+        ...prev, [booking.id]: { ...prev[booking.id], is_active: false },
+      }));
       showToast("Tracking stopped");
-    } catch (err) { showToast("Failed to stop tracking", "error"); }
-    finally { setTrackingLoading(prev => ({ ...prev, [booking.id]: false })); }
+    } catch (err) {
+      showToast("Failed to stop tracking", "error");
+    } finally {
+      setTrackingLoading(prev => ({ ...prev, [booking.id]: false }));
+    }
   };
 
   if (loading) return (
@@ -479,7 +668,7 @@ export default function SellerWorkstation() {
     </div>
   );
 
-  const pendingOrdersCount = productOrders.filter(o => !o.status || o.status === "pending").length;
+  const pendingOrdersCount   = productOrders.filter(o => !o.status || o.status === "pending").length;
   const pendingBookingsCount = bookings.filter(b => !b.status || b.status === "pending").length;
 
   return (
@@ -546,7 +735,9 @@ export default function SellerWorkstation() {
           <button onClick={toggleLive} disabled={liveLoading}>
             {liveLoading
               ? <div className="w-6 h-6 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
-              : isLive ? <FaToggleOn size={32} className="text-green-400" /> : <FaToggleOff size={32} className="text-gray-400" />
+              : isLive
+                ? <FaToggleOn  size={32} className="text-green-400" />
+                : <FaToggleOff size={32} className="text-gray-400"  />
             }
           </button>
         </div>
@@ -565,7 +756,8 @@ export default function SellerWorkstation() {
           </h2>
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-500">{productOrders.length} total</span>
-            <button onClick={fetchProductOrders} className="text-xs text-green-400 bg-green-500/10 px-2 py-0.5 rounded-full">
+            <button onClick={fetchProductOrders}
+              className="text-xs text-green-400 bg-green-500/10 px-2 py-0.5 rounded-full">
               Refresh
             </button>
           </div>
@@ -582,7 +774,9 @@ export default function SellerWorkstation() {
             <div
               key={o.id}
               className={`py-3 border-b border-white/10 transition-all duration-500 ${
-                newOrderIds.has(o.id) ? "bg-green-500/5 border-l-2 border-l-green-500 pl-2 rounded-r-lg" : ""
+                newOrderIds.has(o.id)
+                  ? "bg-green-500/5 border-l-2 border-l-green-500 pl-2 rounded-r-lg"
+                  : ""
               }`}
             >
               {newOrderIds.has(o.id) && (
@@ -600,16 +794,16 @@ export default function SellerWorkstation() {
                   </div>
                   <div>
                     <p className="text-sm font-medium">{o.product_name}</p>
-                    <button
-                      onClick={() => navigate(`/inbox?user=${o.user_id}`)}
-                      className="text-xs text-green-400 hover:underline text-left"
-                    >
+                    <button onClick={() => navigate(`/inbox?user=${o.user_id}`)}
+                      className="text-xs text-green-400 hover:underline text-left">
                       👤 {o.buyer_name}
                     </button>
                     <p className="text-xs text-gray-500">{formatDate(o.created_at)}</p>
-                    {o.quantity && <p className="text-xs text-gray-400">Qty: {o.quantity}</p>}
+                    {o.quantity    && <p className="text-xs text-gray-400">Qty: {o.quantity}</p>}
                     {o.total_amount && (
-                      <p className="text-xs text-green-400 font-semibold">₦{Number(o.total_amount).toLocaleString()}</p>
+                      <p className="text-xs text-green-400 font-semibold">
+                        ₦{Number(o.total_amount).toLocaleString()}
+                      </p>
                     )}
                   </div>
                 </div>
@@ -621,23 +815,23 @@ export default function SellerWorkstation() {
                 <p className="text-[10px] text-gray-500 mb-1.5">Update Status:</p>
                 <div className="flex gap-1.5 flex-wrap">
                   {ORDER_STATUS_STEPS.map(s => (
-                    <button
-                      key={s}
-                      onClick={() => updateOrderStatus(o.id, s)}
+                    <button key={s} onClick={() => updateOrderStatus(o.id, s)}
                       className={`text-xs px-2.5 py-1 rounded-lg transition-all active:scale-95 ${
-                        o.status === s ? "bg-green-600 text-white font-semibold" : "bg-white/10 hover:bg-white/20 text-gray-300"
-                      }`}
-                    >
-                      {s === "shipping" && "📦 "}{s === "on the way" && "🚚 "}
-                      {s === "arriving" && "📍 "}{s === "delivered" && "✅ "}{s}
+                        o.status === s
+                          ? "bg-green-600 text-white font-semibold"
+                          : "bg-white/10 hover:bg-white/20 text-gray-300"
+                      }`}>
+                      {s === "shipping"    && "📦 "}
+                      {s === "on the way"  && "🚚 "}
+                      {s === "arriving"    && "📍 "}
+                      {s === "delivered"   && "✅ "}
+                      {s}
                     </button>
                   ))}
                 </div>
               </div>
-              <button
-                onClick={() => navigate(`/inbox?user=${o.user_id}`)}
-                className="w-full mt-1 bg-white/10 hover:bg-white/20 py-1.5 rounded-lg text-xs transition"
-              >
+              <button onClick={() => navigate(`/inbox?user=${o.user_id}`)}
+                className="w-full mt-1 bg-white/10 hover:bg-white/20 py-1.5 rounded-lg text-xs transition">
                 💬 Message Customer
               </button>
             </div>
@@ -669,14 +863,18 @@ export default function SellerWorkstation() {
               <label className="text-xs text-gray-400 block mb-1">Product Image (optional)</label>
               <label className="flex items-center gap-2 cursor-pointer bg-black/30 p-2 rounded border border-white/10 hover:border-green-500/50 transition">
                 <span className="text-green-400 text-sm">📷</span>
-                <span className="text-sm text-gray-300 truncate">{form.file ? form.file.name : "Tap to choose image"}</span>
+                <span className="text-sm text-gray-300 truncate">
+                  {form.file ? form.file.name : "Tap to choose image"}
+                </span>
                 <input type="file" accept="image/*" className="hidden"
                   onChange={(e) => setForm({ ...form, file: e.target.files[0] })} />
               </label>
               {form.file && (
                 <div className="mt-2 flex items-center gap-2">
-                  <img src={URL.createObjectURL(form.file)} alt="preview" className="w-16 h-16 object-cover rounded-lg" />
-                  <button onClick={() => setForm({ ...form, file: null })} className="text-red-400 text-xs">Remove</button>
+                  <img src={URL.createObjectURL(form.file)} alt="preview"
+                    className="w-16 h-16 object-cover rounded-lg" />
+                  <button onClick={() => setForm({ ...form, file: null })}
+                    className="text-red-400 text-xs">Remove</button>
                 </div>
               )}
             </div>
@@ -686,43 +884,46 @@ export default function SellerWorkstation() {
                 className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 px-3 py-2 rounded text-sm font-semibold transition">
                 {uploading ? "Uploading..." : "Upload Product"}
               </button>
-              <button onClick={() => { setShowUpload(false); setForm({ title: "", description: "", price: "", file: null }); }}
-                className="px-3 py-2 bg-white/10 rounded text-sm">Cancel</button>
+              <button
+                onClick={() => { setShowUpload(false); setForm({ title: "", description: "", price: "", file: null }); }}
+                className="px-3 py-2 bg-white/10 rounded text-sm">
+                Cancel
+              </button>
             </div>
           </div>
         )}
 
         {products.length === 0 ? (
           <p className="text-gray-500 text-sm">No products yet.</p>
-        ) : (
-          products.map((p) => (
-            <div key={p.id} className="flex justify-between items-center py-3 border-b border-white/10">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-xl overflow-hidden bg-white/10 flex items-center justify-center flex-shrink-0">
-                  {p.image_url ? <img src={p.image_url} alt={p.title} className="w-full h-full object-cover" /> : <span>📦</span>}
-                </div>
-                <div>
-                  <p className="text-sm font-medium">{p.title}</p>
-                  <p className="text-xs text-gray-400">
-                    {p.category} {p.price ? `• ₦${Number(p.price).toLocaleString()}` : "• Price on request"}
-                  </p>
-                  <div className="flex items-center gap-1 mt-1">
-                    <FaEye size={10} className="text-blue-400" />
-                    <span className="text-xs text-blue-400">
-                      {productViews[p.id] || 0} view{(productViews[p.id] || 0) !== 1 ? "s" : ""}
-                    </span>
-                    {Date.now() - new Date(p.created_at).getTime() < 48 * 60 * 60 * 1000 && (
-                      <span className="text-[9px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded-full ml-1">48h</span>
-                    )}
-                  </div>
+        ) : products.map((p) => (
+          <div key={p.id} className="flex justify-between items-center py-3 border-b border-white/10">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-xl overflow-hidden bg-white/10 flex items-center justify-center flex-shrink-0">
+                {p.image_url
+                  ? <img src={p.image_url} alt={p.title} className="w-full h-full object-cover" />
+                  : <span>📦</span>}
+              </div>
+              <div>
+                <p className="text-sm font-medium">{p.title}</p>
+                <p className="text-xs text-gray-400">
+                  {p.category} {p.price ? `• ₦${Number(p.price).toLocaleString()}` : "• Price on request"}
+                </p>
+                <div className="flex items-center gap-1 mt-1">
+                  <FaEye size={10} className="text-blue-400" />
+                  <span className="text-xs text-blue-400">
+                    {productViews[p.id] || 0} view{(productViews[p.id] || 0) !== 1 ? "s" : ""}
+                  </span>
+                  {Date.now() - new Date(p.created_at).getTime() < 48 * 60 * 60 * 1000 && (
+                    <span className="text-[9px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded-full ml-1">48h</span>
+                  )}
                 </div>
               </div>
-              <button onClick={() => deleteProduct(p)} className="text-red-400 hover:text-red-300 ml-2">
-                <FaTrash size={12} />
-              </button>
             </div>
-          ))
-        )}
+            <button onClick={() => deleteProduct(p)} className="text-red-400 hover:text-red-300 ml-2">
+              <FaTrash size={12} />
+            </button>
+          </div>
+        ))}
       </div>
 
       {/* HIRE REQUESTS */}
@@ -738,92 +939,82 @@ export default function SellerWorkstation() {
 
         {bookings.length === 0 ? (
           <p className="text-gray-500 text-sm">No hire requests yet.</p>
-        ) : (
-          bookings.map((b) => {
-            const session = trackingSessions[b.id];
-            const isTracking = session?.is_active;
-            const isTrackingLoading = trackingLoading[b.id];
+        ) : bookings.map((b) => {
+          const session          = trackingSessions[b.id];
+          const isTracking       = session?.is_active;
+          const isTrackingLoading = trackingLoading[b.id];
 
-            return (
-              <div key={b.id} className="py-4 border-b border-white/10">
-                <div className="flex justify-between items-start mb-2">
-                  <div className="flex-1 min-w-0 pr-2">
-                    <p className="text-sm font-medium truncate">{b.job_description || "Job Request"}</p>
-                    <p className="text-xs text-gray-500">📍 {b.location}</p>
-                    <p className="text-xs text-gray-500">{formatDate(b.created_at)}</p>
-                  </div>
-                  <span className={`text-xs px-2 py-1 rounded-full whitespace-nowrap flex-shrink-0 ${BOOKING_STATUS_COLOR[b.status] || BOOKING_STATUS_COLOR.pending}`}>
-                    {b.status || "pending"}
-                  </span>
+          return (
+            <div key={b.id} className="py-4 border-b border-white/10">
+              <div className="flex justify-between items-start mb-2">
+                <div className="flex-1 min-w-0 pr-2">
+                  <p className="text-sm font-medium truncate">{b.job_description || "Job Request"}</p>
+                  <p className="text-xs text-gray-500">📍 {b.location}</p>
+                  <p className="text-xs text-gray-500">{formatDate(b.created_at)}</p>
                 </div>
-
-                {/* Pending — accept/reject */}
-                {(!b.status || b.status === "pending") && (
-                  <div className="flex gap-2 mt-2">
-                    <button onClick={() => updateBookingStatus(b.id, "accepted")}
-                      className="flex-1 bg-green-600 hover:bg-green-700 py-1.5 rounded-lg text-xs font-semibold transition active:scale-95">
-                      ✅ Accept
-                    </button>
-                    <button onClick={() => updateBookingStatus(b.id, "rejected")}
-                      className="flex-1 bg-red-600/20 hover:bg-red-600/40 text-red-400 py-1.5 rounded-lg text-xs font-semibold transition active:scale-95">
-                      ❌ Reject
-                    </button>
-                  </div>
-                )}
-
-                {/* Accepted — tracking + message */}
-                {b.status === "accepted" && (
-                  <div className="mt-2 space-y-2">
-                    {/* Tracking card */}
-                    <div className={`rounded-xl p-3 border ${isTracking ? "bg-green-500/5 border-green-500/20" : "bg-white/5 border-white/10"}`}>
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1 min-w-0 pr-2">
-                          <p className="text-xs font-semibold text-white flex items-center gap-1.5">
-                            {isTracking && <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse inline-block" />}
-                            {isTracking ? "Sharing Location" : "Share Location"}
-                          </p>
-                          <p className="text-[10px] text-gray-500 mt-0.5">
-                            {isTracking
-                              ? "Client can see your location in real-time"
-                              : "Start sharing so client can track you"}
-                          </p>
-                        </div>
-                        {isTracking ? (
-                          <button
-                            onClick={() => stopTracking(b)}
-                            disabled={isTrackingLoading}
-                            className="bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-500/30 px-3 py-1.5 rounded-lg text-xs font-semibold transition active:scale-95 disabled:opacity-50 whitespace-nowrap"
-                          >
-                            {isTrackingLoading ? "..." : "🛑 Stop"}
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => startTracking(b)}
-                            disabled={isTrackingLoading}
-                            className="bg-green-600 hover:bg-green-700 disabled:bg-gray-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition active:scale-95 whitespace-nowrap flex items-center gap-1"
-                          >
-                            {isTrackingLoading
-                              ? <><div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" /> Starting...</>
-                              : "📍 Start"
-                            }
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Message client */}
-                    <button
-                      onClick={() => navigate(`/inbox?user=${b.client_id}`)}
-                      className="w-full bg-white/10 hover:bg-white/20 py-1.5 rounded-lg text-xs transition"
-                    >
-                      💬 Message Client
-                    </button>
-                  </div>
-                )}
+                <span className={`text-xs px-2 py-1 rounded-full whitespace-nowrap flex-shrink-0 ${BOOKING_STATUS_COLOR[b.status] || BOOKING_STATUS_COLOR.pending}`}>
+                  {b.status || "pending"}
+                </span>
               </div>
-            );
-          })
-        )}
+
+              {(!b.status || b.status === "pending") && (
+                <div className="flex gap-2 mt-2">
+                  <button onClick={() => updateBookingStatus(b.id, "accepted")}
+                    className="flex-1 bg-green-600 hover:bg-green-700 py-1.5 rounded-lg text-xs font-semibold transition active:scale-95">
+                    ✅ Accept
+                  </button>
+                  <button onClick={() => updateBookingStatus(b.id, "rejected")}
+                    className="flex-1 bg-red-600/20 hover:bg-red-600/40 text-red-400 py-1.5 rounded-lg text-xs font-semibold transition active:scale-95">
+                    ❌ Reject
+                  </button>
+                </div>
+              )}
+
+              {b.status === "accepted" && (
+                <div className="mt-2 space-y-2">
+                  {/* Tracking control */}
+                  <div className={`rounded-xl p-3 border ${isTracking ? "bg-green-500/5 border-green-500/20" : "bg-white/5 border-white/10"}`}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1 min-w-0 pr-2">
+                        <p className="text-xs font-semibold text-white flex items-center gap-1.5">
+                          {isTracking && (
+                            <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse inline-block" />
+                          )}
+                          {isTracking ? "Sharing Location" : "Share Location"}
+                        </p>
+                        <p className="text-[10px] text-gray-500 mt-0.5">
+                          {isTracking
+                            ? "Client can see your location in real-time"
+                            : "Start sharing so client can track you"
+                          }
+                        </p>
+                      </div>
+                      {isTracking ? (
+                        <button onClick={() => stopTracking(b)} disabled={isTrackingLoading}
+                          className="bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-500/30 px-3 py-1.5 rounded-lg text-xs font-semibold transition active:scale-95 disabled:opacity-50 whitespace-nowrap">
+                          {isTrackingLoading ? "..." : "🛑 Stop"}
+                        </button>
+                      ) : (
+                        <button onClick={() => startTracking(b)} disabled={isTrackingLoading}
+                          className="bg-green-600 hover:bg-green-700 disabled:bg-gray-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition active:scale-95 whitespace-nowrap flex items-center gap-1">
+                          {isTrackingLoading
+                            ? <><div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" /> Starting...</>
+                            : "📍 Start"
+                          }
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <button onClick={() => navigate(`/inbox?user=${b.client_id}`)}
+                    className="w-full bg-white/10 hover:bg-white/20 py-1.5 rounded-lg text-xs transition">
+                    💬 Message Client
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
