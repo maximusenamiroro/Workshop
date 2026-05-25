@@ -276,13 +276,6 @@ export default function BuyerWorkspace() {
             className="relative flex items-center justify-center w-9 h-9 rounded-full bg-white/5 hover:bg-white/10 active:scale-90 transition-all"
           >
             <FaBell size={16} className="text-white/70" />
-            {notifCount > 0 && (
-              <span className="absolute -top-1 -right-1 min-w-[16px] h-4 bg-red-500 rounded-full flex items-center justify-center px-1">
-                <span className="text-white text-[9px] font-bold leading-none">
-                  {notifCount > 9 ? "9+" : notifCount}
-                </span>
-              </span>
-            )}
           </button>
 
           {/* Live workers count */}
