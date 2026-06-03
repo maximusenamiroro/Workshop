@@ -354,7 +354,7 @@ export default function BuyerWorkspace() {
                     </div>
                     {/* Small category emoji badge */}
                     <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 bg-[#0f0f0f] rounded-full flex items-center justify-center text-[10px] border border-[#0f0f0f]">
-                      {SUBCATEGORY_EMOJI[cat] || "📦"}
+                      {SUBCATEGORY_EMOJI[cat]}
                     </div>
                   </div>
                   <p className="text-[10px] text-white mt-1.5 truncate w-16 text-center font-medium">

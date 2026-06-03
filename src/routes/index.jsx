@@ -7,6 +7,8 @@ import Login from "../pages/auth/Login";
 import Signup from "../pages/auth/Register";
 import ResetPassword from "../pages/auth/resetpassword";
 import Landing from "../pages/Landing";
+import TermsOfUse from "../pages/TermOfUse";
+import PrivacyPolicy from "../pages/PrivacyPolicy";
 
 const ReelsPage = lazy(() => import("../pages/reels/ReelsPage"));
 const Workspace = lazy(() => import("../pages/Buyerworkspace"));
@@ -65,6 +67,9 @@ export default function AppRoutes() {
           <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
           <Route path="/signup" element={<PublicRoute><Signup /></PublicRoute>} />
           <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/Terms Of Use" element={<TermsOfUse />} /> 
+          <Route path="/Privacy Policy" element={<PrivacyPolicy />} />
+         
 
           {/* Admin — completely separate, no layout */}
           <Route path="/admin-omo-2026" element={<AdminDashboard />} />

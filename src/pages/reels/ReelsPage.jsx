@@ -3,15 +3,26 @@ import { supabase } from "../../lib/supabaseClient";
 
 const LazyReelCard = React.lazy(() => import("./ReelCard"));
 
+// Fisher-Yates shuffle — proper random shuffle
+function shuffleArray(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 export default function ReelsPage() {
   const [reels, setReels] = useState([]);
   const [loading, setLoading] = useState(true);
   const channelRef = useRef(null);
+  // Track which reel index the user is on — for loading more
+  const containerRef = useRef(null);
 
   useEffect(() => {
     fetchReels();
     setupRealtime();
-
     return () => {
       if (channelRef.current) supabase.removeChannel(channelRef.current);
     };
@@ -30,13 +41,20 @@ export default function ReelsPage() {
 
       if (error) throw error;
 
-      // Compute like count from reel_likes array — accurate and always fresh
       const reelsWithCounts = (data || []).map(r => ({
         ...r,
         likes: r.reel_likes?.length || 0,
       }));
 
-      setReels(reelsWithCounts);
+      // ── SHUFFLE: randomise order so every session feels fresh ──
+      // Weight newer reels slightly — take top 30% first, shuffle, then add rest shuffled
+      const total = reelsWithCounts.length;
+      const splitAt = Math.ceil(total * 0.3);
+      const newer = reelsWithCounts.slice(0, splitAt);
+      const older = reelsWithCounts.slice(splitAt);
+      const shuffled = [...shuffleArray(newer), ...shuffleArray(older)];
+
+      setReels(shuffled);
     } catch (err) {
       console.error("Failed to fetch reels:", err.message);
     } finally {
@@ -45,7 +63,6 @@ export default function ReelsPage() {
   };
 
   const setupRealtime = () => {
-    // Watch reel_likes inserts/deletes to update counts without refetching everything
     channelRef.current = supabase
       .channel("reels_likes_realtime")
       .on("postgres_changes", {
@@ -55,10 +72,7 @@ export default function ReelsPage() {
       }, (payload) => {
         const { reel_id } = payload.new;
         setReels(prev =>
-          prev.map(r => r.id === reel_id
-            ? { ...r, likes: r.likes + 1 }
-            : r
-          )
+          prev.map(r => r.id === reel_id ? { ...r, likes: r.likes + 1 } : r)
         );
       })
       .on("postgres_changes", {
@@ -69,31 +83,59 @@ export default function ReelsPage() {
         const { reel_id } = payload.old;
         setReels(prev =>
           prev.map(r => r.id === reel_id
-            ? { ...r, likes: Math.max(0, r.likes - 1) }
-            : r
-          )
+            ? { ...r, likes: Math.max(0, r.likes - 1) } : r)
         );
       })
       .on("postgres_changes", {
         event: "INSERT",
         schema: "public",
         table: "reels",
-      }, () => {
-        // New reel posted — refetch to get it
-        fetchReels();
+      }, async (payload) => {
+        // Fetch the new reel with profile data and inject at a random position
+        // near the top — like TikTok injecting new content mid-scroll
+        const { data } = await supabase
+          .from("reels")
+          .select(`
+            id, video_url, description, type, created_at, user_id,
+            profiles(full_name, avatar_url),
+            reel_likes(id)
+          `)
+          .eq("id", payload.new.id)
+          .maybeSingle();
+
+        if (!data) return;
+        const newReel = { ...data, likes: data.reel_likes?.length || 0 };
+
+        setReels(prev => {
+          // Insert new reel at a random position within first 5 slots
+          const insertAt = Math.floor(Math.random() * Math.min(5, prev.length + 1));
+          const updated = [...prev];
+          updated.splice(insertAt, 0, newReel);
+          return updated;
+        });
       })
       .subscribe();
   };
 
-  // Called by ReelCard when it toggles a like locally
-  // We update just that one reel's count in state — no full refetch
   const handleLikeUpdate = (reelId, delta) => {
     setReels(prev =>
       prev.map(r => r.id === reelId
-        ? { ...r, likes: Math.max(0, r.likes + delta) }
-        : r
-      )
+        ? { ...r, likes: Math.max(0, r.likes + delta) } : r)
     );
+  };
+
+  // Reshuffle when user pulls back to top — like TikTok refreshing feed
+  const handleScroll = () => {
+    const container = containerRef.current;
+    if (!container) return;
+    // If they scrolled back to top (first reel) — reshuffle silently
+    if (container.scrollTop === 0 && reels.length > 3) {
+      setReels(prev => {
+        const top3 = prev.slice(0, 3); // keep first 3 in place for smoothness
+        const rest = shuffleArray(prev.slice(3));
+        return [...top3, ...rest];
+      });
+    }
   };
 
   if (loading) return (
@@ -113,6 +155,8 @@ export default function ReelsPage() {
   return (
     <div className="h-full w-full bg-black flex">
       <div
+        ref={containerRef}
+        onScroll={handleScroll}
         className="w-full md:w-[420px] md:mx-auto h-full overflow-y-scroll snap-y snap-mandatory scroll-smooth relative"
         style={{ scrollSnapType: "y mandatory", WebkitOverflowScrolling: "touch" }}
       >
@@ -126,10 +170,7 @@ export default function ReelsPage() {
                 <div className="w-10 h-10 border-4 border-green-500 border-t-transparent rounded-full animate-spin" />
               </div>
             }>
-              <LazyReelCard
-                reel={reel}
-                onLikeUpdate={handleLikeUpdate}
-              />
+              <LazyReelCard reel={reel} onLikeUpdate={handleLikeUpdate} />
             </Suspense>
           </div>
         ))}

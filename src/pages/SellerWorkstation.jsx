@@ -5,7 +5,7 @@ import {
 } from "react-icons/fa";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useToast } from "../hooks/useToast";
 
 const BOOKING_STATUS_COLOR = {
@@ -33,10 +33,12 @@ const formatDate = (dateStr) =>
 export default function SellerWorkstation() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { id: paramId } = useParams();
   const geoWatchRef        = useRef(null);
   const channelsRef        = useRef([]);
   const workerProductIdsRef = useRef([]);
   const trackingWatchRefs  = useRef({});
+  const isOwnProfile = !paramId || paramId === user?.id;
   const initDoneRef        = useRef(false); // prevent double-init in React StrictMode
   const { showToast, ToastUI } = useToast();
 
@@ -692,7 +694,12 @@ export default function SellerWorkstation() {
           </button>
         </div>
         <h1 className="text-xl font-semibold">Workstation</h1>
-        <FaBell />
+         {isOwnProfile && (
+                    <button onClick={() => navigate("/notifications")}
+                      className="p-2 text-gray-400 hover:text-white transition">
+                      <FaBell size={18} />
+                    </button>
+                  )}
       </div>
 
       {/* CATEGORY */}

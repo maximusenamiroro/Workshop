@@ -537,12 +537,6 @@ export default function SellerProfile() {
 
         <div className="flex items-center gap-1">
           {isOwnProfile && (
-            <button onClick={() => navigate("/notifications")}
-              className="p-2 text-gray-400 hover:text-white transition">
-              <FaBell size={18} />
-            </button>
-          )}
-          {isOwnProfile && (
             <button onClick={() => setMenuOpen(!menuOpen)}
               className="p-2 text-gray-400 hover:text-white active:scale-90 transition-transform">
               <FaEllipsisV size={18} />
