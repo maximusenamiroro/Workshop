@@ -491,7 +491,7 @@ export default function LandingPage() {
             {/* Brand */}
             <div className="col-span-2 md:col-span-1">
               <div className="flex items-center gap-2 mb-3">
-                <img src={logo} alt="OmoDoit" className="w-8 h-8 rounded-lg" />
+                <img src={logo} alt="OmoDoit" className="w-10 h-10 rounded-lg" />
                 <span className="font-bold text-lg">OmoDoit</span>
               </div>
               <p className="text-gray-500 text-sm leading-relaxed">
@@ -547,7 +547,7 @@ export default function LandingPage() {
           </div>
 
           <div className="border-t border-white/5 pt-6 flex flex-col sm:flex-row justify-between items-center gap-3">
-            <p className="text-gray-600 text-sm">© 2026 OmoD0it. All rights reserved.</p>
+            <p className="text-gray-600 text-sm">© 2026 OmoDoit. All rights reserved.</p>
             <div className="flex gap-6 text-xs text-gray-600">
               <span className="hover:text-gray-400 cursor-pointer transition">Privacy Policy</span>
               <span className="hover:text-gray-400 cursor-pointer transition">Terms of Service</span>
