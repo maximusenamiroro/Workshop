@@ -153,8 +153,8 @@ export default function LandingPage() {
       <header className="fixed top-0 left-0 right-0 z-50 bg-[#0B0F19]/90 backdrop-blur-md border-b border-white/5">
         <div className="max-w-6xl mx-auto px-6 py-4 flex justify-between items-center">
           <div className="flex items-center gap-2.5">
-            <img src={logo} alt="Omoworkit" className="w-9 h-9 rounded-xl" />
-            <span className="text-xl font-bold tracking-tight">omoworkit</span>
+            <img src={logo} alt="OmoDoit" className="w-9 h-9 rounded-xl" />
+            <span className="text-xl font-bold tracking-tight">OmoDoit</span>
           </div>
 
           {/* Desktop nav */}
@@ -235,7 +235,7 @@ export default function LandingPage() {
           </h1>
 
           <p className="text-gray-400 text-lg md:text-xl max-w-2xl mx-auto mb-10 leading-relaxed">
-            Omoworkit connects skilled workers and clients instantly.
+            OmoDoit connects skilled workers and clients instantly.
             Go live, get booked, track jobs, sell products — all in one app.
           </p>
 
@@ -431,7 +431,7 @@ export default function LandingPage() {
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-14">
             <p className="text-green-400 text-sm font-semibold uppercase tracking-widest mb-3">Reviews</p>
-            <h2 className="text-4xl md:text-5xl font-bold">People love Omoworkit</h2>
+            <h2 className="text-4xl md:text-5xl font-bold">People love OmoDoit</h2>
           </div>
           <div className="grid md:grid-cols-3 gap-6">
             {testimonials.map((t, i) => (
@@ -465,7 +465,7 @@ export default function LandingPage() {
             Ready to get started?
           </h2>
           <p className="text-gray-400 text-lg mb-10 max-w-xl mx-auto">
-            Join thousands of workers and clients already using Omoworkit to connect, work, and grow.
+            Join thousands of workers and clients already using OmoDoit to connect, work, and grow.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <button
@@ -491,8 +491,8 @@ export default function LandingPage() {
             {/* Brand */}
             <div className="col-span-2 md:col-span-1">
               <div className="flex items-center gap-2 mb-3">
-                <img src={logo} alt="Omoworkit" className="w-8 h-8 rounded-lg" />
-                <span className="font-bold text-lg">omoworkit</span>
+                <img src={logo} alt="OmoDoit" className="w-8 h-8 rounded-lg" />
+                <span className="font-bold text-lg">OmoDoit</span>
               </div>
               <p className="text-gray-500 text-sm leading-relaxed">
                 Connecting skilled workers and clients across Nigeria.
@@ -547,7 +547,7 @@ export default function LandingPage() {
           </div>
 
           <div className="border-t border-white/5 pt-6 flex flex-col sm:flex-row justify-between items-center gap-3">
-            <p className="text-gray-600 text-sm">© 2026 Omoworkit. All rights reserved.</p>
+            <p className="text-gray-600 text-sm">© 2026 OmoD0it. All rights reserved.</p>
             <div className="flex gap-6 text-xs text-gray-600">
               <span className="hover:text-gray-400 cursor-pointer transition">Privacy Policy</span>
               <span className="hover:text-gray-400 cursor-pointer transition">Terms of Service</span>
